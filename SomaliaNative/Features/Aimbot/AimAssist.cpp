@@ -1,5 +1,6 @@
 #include "AimAssist.h"
 #include "Aimbot.h"
+#include "RageBot.h"
 #include "../../Core/Logger.h"
 #include "../../Core/RuntimeState.h"
 #include <math.h>
@@ -12,6 +13,12 @@ namespace AimAssist
     static uint64_t s_LastLogTick = 0;
     static ULONGLONG s_DoubleTapTick = 0;
     static bool s_DoubleTapFired = false;
+    static uint64_t s_LastLocalShotTick = 0;
+
+    uint64_t GetLastLocalShotTick()
+    {
+        return s_LastLocalShotTick;
+    }
 
     const SilentAimDiagnostic& GetSilentDiagnostic()
     {
@@ -264,6 +271,23 @@ namespace AimAssist
             }
         }
 
+        if (isShootingNow || s_DoubleTapFired)
+        {
+            s_LastLocalShotTick = GetTickCount64();
+        }
+
+        // Se o RageBot estiver ativamente mirando/atirando neste quadro, cede a atuação física de mouse
+        // para prevenir conflitos de deltas entre mouse_event e SendInput
+        if (RageBot::GetState().isActive)
+        {
+            s_State.accumulatedX = 0.0f;
+            s_State.accumulatedY = 0.0f;
+            s_State.outputX = 0;
+            s_State.outputY = 0;
+            s_State.applied = false;
+            return;
+        }
+
         s_State.accumulatedX += smoothDeltaX;
         s_State.accumulatedY += smoothDeltaY;
 
@@ -274,7 +298,9 @@ namespace AimAssist
         s_State.outputY = moveY;
         s_State.applied = false;
 
-        if (g_MenuState.silentAim.enabled)
+        // Se APENAS Silent Aim estiver habilitado (sem LegitBot), suprime movimento físico da mira.
+        // Se LegitBot estiver habilitado, mantém o movimento mecânico suave da mira normalmente!
+        if (g_MenuState.silentAim.enabled && !g_MenuState.legitBot.enabled)
         {
             s_State.accumulatedX = 0.0f;
             s_State.accumulatedY = 0.0f;

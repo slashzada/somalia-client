@@ -84,6 +84,8 @@ namespace Config
         AppendFmt(out, "    \"exploitLagPeek\": %s,\n", g_MenuState.legitBot.exploitLagPeek ? "true" : "false");
         AppendFmt(out, "    \"exploitHideShots\": %s,\n", g_MenuState.legitBot.exploitHideShots ? "true" : "false");
         AppendFmt(out, "    \"exploitDoubleTap\": %s,\n", g_MenuState.legitBot.exploitDoubleTap ? "true" : "false");
+        AppendFmt(out, "    \"preferBodyAim\": %s,\n", g_MenuState.legitBot.preferBodyAim ? "true" : "false");
+        AppendFmt(out, "    \"ignoreLimbs\": %s,\n", g_MenuState.legitBot.ignoreLimbs ? "true" : "false");
         AppendFmt(out, "    \"weapons\": [\n");
 
         for (int i = 0; i < 4; i++)
@@ -354,6 +356,8 @@ namespace Config
             tempState.legitBot.exploitLagPeek = ParseBool(pLegit, "\"exploitLagPeek\"", tempState.legitBot.exploitLagPeek);
             tempState.legitBot.exploitHideShots = ParseBool(pLegit, "\"exploitHideShots\"", tempState.legitBot.exploitHideShots);
             tempState.legitBot.exploitDoubleTap = ParseBool(pLegit, "\"exploitDoubleTap\"", tempState.legitBot.exploitDoubleTap);
+            tempState.legitBot.preferBodyAim = ParseBool(pLegit, "\"preferBodyAim\"", tempState.legitBot.preferBodyAim);
+            tempState.legitBot.ignoreLimbs = ParseBool(pLegit, "\"ignoreLimbs\"", tempState.legitBot.ignoreLimbs);
 
             const char* pWeapons = strstr(pLegit, "\"weapons\"");
             if (pWeapons)

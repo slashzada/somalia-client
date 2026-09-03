@@ -5,7 +5,9 @@
 #include "../../Core/Logger.h"
 #include "../../Config/Config.h"
 #include "../../Features/Aimbot/Aimbot.h"
+#include "../../Features/Aimbot/AimAssist.h"
 #include "../../Features/Aimbot/TargetSelector.h"
+#include "../../Features/AntiAim/AntiAim.h"
 #include "../../Core/RuntimeState.h"
 #include <stdio.h>
 #include <string.h>
@@ -437,6 +439,8 @@ namespace SAMP
         outData.health = 0.0f;
         outData.armor = 0.0f;
         outData.name[0] = '\0';
+        outData.color = 0;
+        outData.team = -1;
 
         uintptr_t pPlayerPool = GetPlayerPool();
         if (!pPlayerPool || index < 0 || index >= 1004)
@@ -455,6 +459,16 @@ namespace SAMP
                 return false;
 
             outData.isValid = true;
+
+            // 2.1 Lê cor e team do jogador remoto
+            if (!IsBadReadPtr(reinterpret_cast<void*>(pRemotePlayer + 0x28), sizeof(uint32_t)))
+            {
+                outData.color = *reinterpret_cast<uint32_t*>(pRemotePlayer + 0x28);
+            }
+            if (!IsBadReadPtr(reinterpret_cast<void*>(pRemotePlayer + 0x8), sizeof(uint8_t)))
+            {
+                outData.team = static_cast<int>(*reinterpret_cast<uint8_t*>(pRemotePlayer + 0x8));
+            }
 
             // 3. Lê o Nome do Jogador
             const char* pName = reinterpret_cast<const char*>(pRemotePlayer + 0xC);
@@ -552,6 +566,59 @@ namespace SAMP
         {
             return false;
         }
+    }
+
+    uint32_t GetLocalPlayerColor()
+    {
+        uintptr_t pPlayerPool = GetPlayerPool();
+        if (!pPlayerPool) return 0;
+
+        __try
+        {
+            uintptr_t colorOff = (s_Version == Version::R1) ? 0x8 : 0x10;
+            if (!IsBadReadPtr(reinterpret_cast<void*>(pPlayerPool + colorOff), sizeof(uint32_t)))
+            {
+                return *reinterpret_cast<uint32_t*>(pPlayerPool + colorOff);
+            }
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER) {}
+        return 0;
+    }
+
+    bool IsTeammate(int index)
+    {
+        if (index < 0 || index >= 1004)
+            return false;
+
+        uint16_t localId = GetLocalPlayerId();
+        if (index == static_cast<int>(localId))
+            return true;
+
+        RemotePlayerData rp;
+        if (!GetRemotePlayer(index, rp) || !rp.isValid)
+            return false;
+
+        // Se o servidor definiu Team (diferente de 255 e -1)
+        uint8_t localTeam = 255;
+        uintptr_t pLocal = GetLocalPlayer();
+        if (pLocal && !IsBadReadPtr(reinterpret_cast<void*>(pLocal + 0x8), sizeof(uint8_t)))
+        {
+            localTeam = *reinterpret_cast<uint8_t*>(pLocal + 0x8);
+        }
+
+        if (localTeam != 255 && rp.team != 255 && rp.team != -1)
+        {
+            return (rp.team == static_cast<int>(localTeam));
+        }
+
+        // Se time não estiver configurado pelo servidor, confronta cor se não for nula/branca padrão
+        uint32_t localColor = GetLocalPlayerColor();
+        if (localColor != 0 && rp.color != 0 && (rp.color & 0x00FFFFFF) == (localColor & 0x00FFFFFF))
+        {
+            return true;
+        }
+
+        return false;
     }
 
     typedef bool(__thiscall* SendBitStream_t)(void* pThis, void* pBitStream, int priority, int reliability, char orderingChannel);
@@ -691,7 +758,8 @@ namespace SAMP
 
         // ── Critério 4: Modo de ativação (chaves no momento do disparo) ──
         bool isAiming = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
-        bool isShooting = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
+        bool isShooting = ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0) ||
+                          ((GetTickCount64() - AimAssist::GetLastLocalShotTick()) < 150);
         bool activationOK = false;
         switch (sw.activationMode)
         {
@@ -941,6 +1009,12 @@ namespace SAMP
                         MutateInvertebredPacket(data, byteCount);
                     }
                 }
+
+                // Fake Lag: represa pacotes de sincronização de jogador (207) ou mira (203)
+                if ((packetId == 207 || packetId == 203) && AntiAim::ShouldChokeSyncPacket())
+                {
+                    return true;
+                }
             }
         }
         return s_OriginalSendBitStream(pThis, pBitStream, priority, reliability, orderingChannel);
@@ -994,6 +1068,12 @@ namespace SAMP
                         MutateInvertebredPacket(reinterpret_cast<unsigned char*>(const_cast<char*>(data)), length);
                     }
                 }
+            }
+
+            // Fake Lag: represa pacotes de sincronização de jogador (207) ou mira (203)
+            if ((packetId == 207 || packetId == 203) && AntiAim::ShouldChokeSyncPacket())
+            {
+                return true;
             }
         }
         return s_OriginalSendData(pThis, data, length, priority, reliability, orderingChannel);

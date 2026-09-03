@@ -497,6 +497,9 @@ namespace ESP
             if (i == localPlayerId)
                 continue;
 
+            if (g_MenuState.visuals.enemyOnly && SAMP::IsTeammate(i))
+                continue;
+
             SAMP::RemotePlayerData player;
             if (!SAMP::GetRemotePlayer(i, player) || !player.isValid)
             {

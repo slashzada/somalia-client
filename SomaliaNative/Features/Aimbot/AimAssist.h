@@ -62,5 +62,6 @@ namespace AimAssist
     // Diagnóstico e telemetria de Silent Aim
     const SilentAimDiagnostic& GetSilentDiagnostic();
     void ResetSilentDiagnostic();
+    uint64_t GetLastLocalShotTick();
 }
 

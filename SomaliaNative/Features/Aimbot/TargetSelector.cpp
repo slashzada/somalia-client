@@ -1,4 +1,5 @@
 #include "TargetSelector.h"
+#include "Aimbot.h"
 #include "../../Engine/SAMP/SAMP.h"
 #include "../../Engine/GTA/GTA.h"
 #include "../../Core/RuntimeState.h"
@@ -28,9 +29,16 @@ namespace TargetSelector
         float bestMetric = 999999.0f;
 
         // Mapeamento dos ossos reais do GTA San Andreas 1.0 US
+        int configuredBone = config.bone;
+        if (g_MenuState.legitBot.preferBodyAim && configuredBone == 0)
+        {
+            // Se preferBodyAim estiver ativo e a arma configurada para HEAD, prefere CHEST
+            configuredBone = 2;
+        }
+
         int targetBoneId = 8;
         const char* targetBoneName = "HEAD";
-        switch (config.bone)
+        switch (configuredBone)
         {
         case 0:
             targetBoneId = 8;
@@ -59,6 +67,9 @@ namespace TargetSelector
             if (i == localPlayerId)
                 continue;
 
+            if (config.teamCheck && SAMP::IsTeammate(i))
+                continue;
+
             SAMP::RemotePlayerData player;
             if (!SAMP::GetRemotePlayer(i, player) || !player.isValid)
                 continue;
@@ -85,13 +96,35 @@ namespace TargetSelector
                 continue;
 
             // 3. Obtenção do Osso Selecionado via API nativa do GTA
+            int effectiveBoneId = targetBoneId;
+            const char* effectiveBoneName = targetBoneName;
+
+            if (g_MenuState.legitBot.ignoreLimbs && player.pGtaPed)
+            {
+                float* pVelX = reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(player.pGtaPed) + 0x44);
+                float* pVelY = reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(player.pGtaPed) + 0x48);
+                if (pVelX && pVelY)
+                {
+                    float speed = sqrtf((*pVelX) * (*pVelX) + (*pVelY) * (*pVelY));
+                    if (speed > 0.05f)
+                    {
+                        // Se o alvo estiver correndo e o osso não for cabeça/pescoço/peito/pelve, força CHEST
+                        if (effectiveBoneId != 8 && effectiveBoneId != 5 && effectiveBoneId != 4 && effectiveBoneId != 2)
+                        {
+                            effectiveBoneId = 4;
+                            effectiveBoneName = "CHEST";
+                        }
+                    }
+                }
+            }
+
             float boneWorldPos[3] = { 0.0f, 0.0f, 0.0f };
-            if (!GTA::GetPedBonePosition(player.pGtaPed, targetBoneId, boneWorldPos))
+            if (!GTA::GetPedBonePosition(player.pGtaPed, effectiveBoneId, boneWorldPos))
             {
                 // Fallback proporcional caso a interpolação de skin do osso não responda
                 boneWorldPos[0] = player.position[0];
                 boneWorldPos[1] = player.position[1];
-                boneWorldPos[2] = player.position[2] + (config.bone == 0 ? 0.8f : (config.bone == 1 ? 0.6f : 0.2f));
+                boneWorldPos[2] = player.position[2] + (configuredBone == 0 ? 0.8f : (configuredBone == 1 ? 0.6f : 0.2f));
             }
 
             // 4. Filtro: Visibility Check (Raycast seguro GTA SA CWorld::GetIsLineOfSightClear 0x0056A490)
@@ -152,6 +185,14 @@ namespace TargetSelector
                 break;
             }
 
+            // Histerese / Sticky Target: bônus de 20% para o alvo já selecionado no frame anterior
+            // para evitar oscilações contínuas quando alvos cruzam o FOV
+            int prevTargetId = Aimbot::GetCurrentTarget().valid ? Aimbot::GetCurrentTarget().playerId : -1;
+            if (i == prevTargetId && prevTargetId != -1)
+            {
+                currentMetric *= 0.80f;
+            }
+
             if (currentMetric < bestMetric)
             {
                 bestMetric = currentMetric;
@@ -164,8 +205,8 @@ namespace TargetSelector
                 bestTarget.worldPosition[2] = boneWorldPos[2];
                 bestTarget.distance3D = dist3D;
                 bestTarget.distanceFromCrosshair = distanceFromCrosshair;
-                bestTarget.bone = targetBoneId;
-                bestTarget.boneName = targetBoneName;
+                bestTarget.bone = effectiveBoneId;
+                bestTarget.boneName = effectiveBoneName;
                 bestTarget.health = player.health;
                 bestTarget.armor = player.armor;
                 strncpy(bestTarget.name, player.name[0] ? player.name : "Player", sizeof(bestTarget.name) - 1);

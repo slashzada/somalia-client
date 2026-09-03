@@ -83,6 +83,29 @@ namespace AntiAim
         return g_MenuState.antiAim.invertebred;
     }
 
+    bool ShouldChokeSyncPacket()
+    {
+        if (!g_MenuState.antiAim.fakeLag || !s_IsActive)
+        {
+            s_ChokedTicks = 0;
+            return false;
+        }
+
+        int limit = g_MenuState.antiAim.fakeLagLimit;
+        if (limit < 1) limit = 1;
+        if (limit > 16) limit = 16;
+
+        s_ChokedTicks++;
+        if (s_ChokedTicks <= limit)
+        {
+            // Retorna true para instruir o hook de rede a suprimir este pacote de sincronização
+            return true;
+        }
+
+        s_ChokedTicks = 0;
+        return false;
+    }
+
     static void ProcessInvertebred(uintptr_t pedAddr)
     {
         if (!g_MenuState.antiAim.invertebred)
@@ -299,16 +322,50 @@ namespace AntiAim
             s_FakeAngle = newHeading * (180.0f / PI);
 
             // 5. Modos de Pitch
+            float pitchAngle = 0.0f;
+            bool applyPitch = false;
             switch (g_MenuState.antiAim.pitchMode)
             {
-            case 1: // Emotion (-89 graus)
+            case 1: // Emotion / Down (-89 graus)
+                pitchAngle = -1.55334f;
+                applyPitch = true;
                 break;
             case 2: // Up (89 graus)
+                pitchAngle = 1.55334f;
+                applyPitch = true;
                 break;
             case 3: // Zero (0 graus)
+                pitchAngle = 0.0f;
+                applyPitch = true;
                 break;
             default:
                 break;
+            }
+
+            if (applyPitch)
+            {
+                // Aplica na variável de inclinação de mira nativa do GTA SA CPed (+0x5BC)
+                float* pAimZ = reinterpret_cast<float*>(pedAddr + 0x5BC);
+                if (pAimZ && !IsBadWritePtr(pAimZ, sizeof(float)))
+                {
+                    *pAimZ = pitchAngle;
+                }
+
+                // Se SA-MP estiver ativo e Invertebred não estiver sobrepondo, reflete no quaternion da rede
+                if (SAMP::IsLoaded() && !g_MenuState.antiAim.invertebred)
+                {
+                    uintptr_t pOnFoot = SAMP::GetLocalPlayerOnFootData();
+                    if (pOnFoot && !IsBadWritePtr(reinterpret_cast<void*>(pOnFoot), 68))
+                    {
+                        float* pQuat = reinterpret_cast<float*>(pOnFoot + 18);
+                        float halfPitch = pitchAngle * 0.5f;
+                        float halfYaw = newHeading * 0.5f;
+                        pQuat[0] = sinf(halfPitch) * cosf(halfYaw);
+                        pQuat[1] = -sinf(halfPitch) * sinf(halfYaw);
+                        pQuat[2] = cosf(halfPitch) * sinf(halfYaw);
+                        pQuat[3] = cosf(halfPitch) * cosf(halfYaw);
+                    }
+                }
             }
         }
         __except (EXCEPTION_EXECUTE_HANDLER)

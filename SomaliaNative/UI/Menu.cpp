@@ -291,7 +291,10 @@ namespace Menu
         ImGui::MenuChild("Exploits", ImVec2(320, 130));
         {
             ImGui::Spacing();
-            ImGui::Checkbox("Silent Aim", &g_MenuState.legitBot.silentAim);
+            if (ImGui::Checkbox("Silent Aim", &g_MenuState.silentAim.enabled))
+            {
+                g_MenuState.legitBot.silentAim = g_MenuState.silentAim.enabled;
+            }
             ImGui::Checkbox("Lag Peek", &g_MenuState.legitBot.exploitLagPeek);
             ImGui::Checkbox("Hide Shots", &g_MenuState.legitBot.exploitHideShots);
             ImGui::Checkbox("Double Tap", &g_MenuState.legitBot.exploitDoubleTap);
@@ -460,7 +463,10 @@ namespace Menu
         ImGui::MenuChild("Silent Aim Configuration", ImVec2(320, 413));
         {
             ImGui::Spacing();
-            ImGui::Checkbox("Master Enable Silent Aim", &g_MenuState.silentAim.enabled);
+            if (ImGui::Checkbox("Master Enable Silent Aim", &g_MenuState.silentAim.enabled))
+            {
+                g_MenuState.legitBot.silentAim = g_MenuState.silentAim.enabled;
+            }
             ImGui::Checkbox("Enable for this Weapon", &sw.enabled);
             ImGui::Separator();
             ImGui::Spacing();

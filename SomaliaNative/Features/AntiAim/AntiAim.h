@@ -13,4 +13,5 @@ namespace AntiAim
     float GetFakeAngle();
     bool IsActive();
     bool IsInvertebredActive();
+    bool ShouldChokeSyncPacket();
 }

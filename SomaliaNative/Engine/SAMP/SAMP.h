@@ -26,6 +26,8 @@ namespace SAMP
         float health;
         float armor;
         char name[32];
+        uint32_t color;
+        int team;
     };
 
     bool IsLoaded();
@@ -44,6 +46,8 @@ namespace SAMP
 
     bool GetRemotePlayer(int index, RemotePlayerData& outData);
     bool GetLocalPlayerPosition(float outPos[3]);
+    bool IsTeammate(int index);
+    uint32_t GetLocalPlayerColor();
 
     enum class TeardownStatus
     {
