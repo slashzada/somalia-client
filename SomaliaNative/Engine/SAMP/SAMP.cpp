@@ -821,6 +821,12 @@ namespace SAMP
             return s_OriginalSendBitStream(pThis, pBitStream, priority, reliability, orderingChannel);
         }
 
+        Main::CallbackGuard guard;
+        if (!guard.IsActive())
+        {
+            return s_OriginalSendBitStream(pThis, pBitStream, priority, reliability, orderingChannel);
+        }
+
         if (pBitStream && !IsBadReadPtr(pBitStream, 16))
         {
             int numberOfBitsUsed = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(pBitStream) + 0);
@@ -870,6 +876,12 @@ namespace SAMP
         }
 
         if (Main::IsShuttingDown())
+        {
+            return s_OriginalSendData(pThis, data, length, priority, reliability, orderingChannel);
+        }
+
+        Main::CallbackGuard guard;
+        if (!guard.IsActive())
         {
             return s_OriginalSendData(pThis, data, length, priority, reliability, orderingChannel);
         }
@@ -1095,13 +1107,11 @@ namespace SAMP
             }
         }
 
-        // 3. Validação de segurança: apenas marca desinstalado e zera ponteiros se a VTable foi restaurada com sucesso
+        // 3. Validação de segurança: marca desinstalado com sucesso mantendo ponteiros originais defensivos
         if (restored)
         {
             s_HookedVTable = nullptr;
             s_HookedOffset = 0;
-            s_OriginalSendData = nullptr;
-            s_OriginalSendBitStream = nullptr;
             s_RakHookInstalled = false;
             Logger::Log("[SAMP][DIAG][UNHOOK] RakClient VMT hook completamente removido e estado limpo.");
         }

@@ -19,8 +19,20 @@ static HMODULE s_hModule = NULL;
 static std::atomic<ShutdownState> s_ShutdownState(ShutdownState::Running);
 static HANDLE s_hInitThread = nullptr;
 static HANDLE s_hShutdownThread = nullptr;
+static SRWLOCK s_CallbackLock = SRWLOCK_INIT;
+static int s_ActiveCallbacks = 0;
+static HANDLE s_hZeroCallbacksEvent = nullptr;
 
 static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam);
+
+static HANDLE GetOrCreateZeroCallbacksEvent()
+{
+    if (!s_hZeroCallbacksEvent)
+    {
+        s_hZeroCallbacksEvent = CreateEventA(NULL, TRUE, TRUE, NULL);
+    }
+    return s_hZeroCallbacksEvent;
+}
 
 namespace Main
 {
@@ -72,6 +84,71 @@ namespace Main
     {
         RequestUnload();
     }
+
+    bool EnterCallback()
+    {
+        AcquireSRWLockExclusive(&s_CallbackLock);
+        if (s_ShutdownState.load() != ShutdownState::Running)
+        {
+            ReleaseSRWLockExclusive(&s_CallbackLock);
+            return false;
+        }
+
+        s_ActiveCallbacks++;
+        HANDLE hEvent = GetOrCreateZeroCallbacksEvent();
+        if (hEvent)
+        {
+            ResetEvent(hEvent);
+        }
+        ReleaseSRWLockExclusive(&s_CallbackLock);
+        return true;
+    }
+
+    void LeaveCallback()
+    {
+        AcquireSRWLockExclusive(&s_CallbackLock);
+        s_ActiveCallbacks--;
+        if (s_ActiveCallbacks <= 0)
+        {
+            s_ActiveCallbacks = 0;
+            HANDLE hEvent = GetOrCreateZeroCallbacksEvent();
+            if (hEvent)
+            {
+                SetEvent(hEvent);
+            }
+        }
+        ReleaseSRWLockExclusive(&s_CallbackLock);
+    }
+
+    bool WaitForCallbacks(DWORD timeoutMs)
+    {
+        AcquireSRWLockShared(&s_CallbackLock);
+        if (s_ActiveCallbacks == 0)
+        {
+            ReleaseSRWLockShared(&s_CallbackLock);
+            return true;
+        }
+        ReleaseSRWLockShared(&s_CallbackLock);
+
+        HANDLE hEvent = nullptr;
+        AcquireSRWLockExclusive(&s_CallbackLock);
+        hEvent = GetOrCreateZeroCallbacksEvent();
+        ReleaseSRWLockExclusive(&s_CallbackLock);
+
+        if (!hEvent)
+            return true;
+
+        DWORD res = WaitForSingleObject(hEvent, timeoutMs);
+        return (res == WAIT_OBJECT_0);
+    }
+
+    int GetActiveCallbacksCount()
+    {
+        AcquireSRWLockShared(&s_CallbackLock);
+        int count = s_ActiveCallbacks;
+        ReleaseSRWLockShared(&s_CallbackLock);
+        return count;
+    }
 }
 
 static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam)
@@ -79,7 +156,7 @@ static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam)
     Logger::Log("[SOMALIA][UNLOAD] STOPPING");
 
     // ETAPA 3: Bloquear novos callbacks de executar lógica do Somalia.
-    // Garantido pois IsShuttingDown() retorna true para todos os callbacks (hkPresent, hkReset, hkWndProc, RakNet).
+    // Garantido pois s_ShutdownState == Stopping, fazendo EnterCallback() e IsShuttingDown() recusarem novas execuções.
 
     // ETAPA 4 & 5: Parar e aguardar InitializationThread
     Logger::Log("[SOMALIA][UNLOAD] THREADS STOP REQUESTED");
@@ -95,6 +172,15 @@ static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam)
     }
     Logger::Log("[SOMALIA][UNLOAD] THREAD InitializationThread STOPPED");
 
+    // ETAPA 5.1: Aguardar término de todos os callbacks ativos em execução
+    Logger::Log("[SOMALIA][UNLOAD] WAITING FOR ACTIVE CALLBACKS");
+    if (!Main::WaitForCallbacks(5000))
+    {
+        Logger::Log("[SOMALIA][UNLOAD] AVISO: Timeout aguardando callbacks ativos (restantes=%d).",
+            Main::GetActiveCallbacksCount());
+    }
+    Logger::Log("[SOMALIA][UNLOAD] ACTIVE CALLBACKS DRAINED");
+
     // ETAPA 7: Restaurar hooks (ordem mínima: D3D9, WndProc, SAMP/Rak hook)
     Logger::Log("[SOMALIA][UNLOAD] RESTORING HOOKS");
     D3D9Hook::RestoreHooks();
@@ -102,7 +188,7 @@ static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam)
     SAMP::Shutdown();
     Logger::Log("[SOMALIA][UNLOAD] HOOKS RESTORED");
 
-    // ETAPA 8: Permitir pequena drenagem de callbacks já em execução
+    // ETAPA 8: Permitir pequena drenagem de callbacks como margem defensiva adicional
     Sleep(100);
 
     // ETAPA 9: Resetar módulos (resets já existentes)
@@ -125,6 +211,15 @@ static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam)
     // ETAPA 12: Fechar logger
     Logger::Log("[SOMALIA][UNLOAD] FREE LIBRARY");
     Logger::Shutdown();
+
+    // Fechar event handle de sincronização de callbacks
+    AcquireSRWLockExclusive(&s_CallbackLock);
+    if (s_hZeroCallbacksEvent)
+    {
+        CloseHandle(s_hZeroCallbacksEvent);
+        s_hZeroCallbacksEvent = nullptr;
+    }
+    ReleaseSRWLockExclusive(&s_CallbackLock);
 
     // ETAPA 13: Executar FreeLibraryAndExitThread(...) em um único local controlado
     HANDLE hSelf = s_hShutdownThread;

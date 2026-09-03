@@ -36,6 +36,12 @@ namespace D3D9Hook
             return s_oReset ? s_oReset(pDevice, pPresentationParameters) : D3D_OK;
         }
 
+        Main::CallbackGuard guard;
+        if (!guard.IsActive())
+        {
+            return s_oReset ? s_oReset(pDevice, pPresentationParameters) : D3D_OK;
+        }
+
         if (s_bImGuiInitialized)
         {
             ImGui_ImplDX9_InvalidateDeviceObjects();
@@ -67,6 +73,12 @@ namespace D3D9Hook
             {
                 Main::BeginShutdown();
             }
+            return s_oPresent ? s_oPresent(pDevice, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion) : D3D_OK;
+        }
+
+        Main::CallbackGuard guard;
+        if (!guard.IsActive())
+        {
             return s_oPresent ? s_oPresent(pDevice, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion) : D3D_OK;
         }
 
@@ -181,7 +193,7 @@ namespace D3D9Hook
                 VirtualProtect(&s_pVTable[17], sizeof(void*), PAGE_EXECUTE_READWRITE, &oldProtect);
                 s_pVTable[17] = reinterpret_cast<void*>(s_oPresent);
                 VirtualProtect(&s_pVTable[17], sizeof(void*), oldProtect, &oldProtect);
-                s_oPresent = nullptr;
+                // Ponteiro original s_oPresent preservado para evitar access violation em chamadas defensivas
             }
 
             if (s_oReset)
@@ -189,7 +201,7 @@ namespace D3D9Hook
                 VirtualProtect(&s_pVTable[16], sizeof(void*), PAGE_EXECUTE_READWRITE, &oldProtect);
                 s_pVTable[16] = reinterpret_cast<void*>(s_oReset);
                 VirtualProtect(&s_pVTable[16], sizeof(void*), oldProtect, &oldProtect);
-                s_oReset = nullptr;
+                // Ponteiro original s_oReset preservado para evitar access violation em chamadas defensivas
             }
 
             s_pVTable = nullptr;

@@ -266,6 +266,16 @@ namespace RuntimeState
             s_State = newState;
             s_CurrentLocalPed = newPedContext;
             s_LastStateChangeTick = GetTickCount64();
+
+            if (newState == PlayerLifeState::DEAD)
+            {
+                s_LastLocalPed = nullptr;
+            }
+            else if (newState == PlayerLifeState::ALIVE_AFTER_RESPAWN ||
+                     (oldState == PlayerLifeState::RESPAWNING && newState == PlayerLifeState::ALIVE))
+            {
+                s_LastLocalPed = rawPed;
+            }
         }
         else
         {
@@ -291,12 +301,10 @@ namespace RuntimeState
             {
                 Logger::Log("[SOMALIA][LIFECYCLE] LocalPed invalidated");
                 OnPlayerDeath();
-                s_LastLocalPed = nullptr;
             }
             else if (newState == PlayerLifeState::ALIVE_AFTER_RESPAWN ||
                      (oldState == PlayerLifeState::RESPAWNING && newState == PlayerLifeState::ALIVE))
             {
-                s_LastLocalPed = rawPed;
                 OnPlayerRespawn();
             }
         }

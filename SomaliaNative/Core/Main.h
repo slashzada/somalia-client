@@ -19,4 +19,38 @@ namespace Main
     HMODULE GetModuleInstance();
     void UnloadAndExit();
     bool IsUnloaded();
+
+    // Rastreamento de ciclo de vida de callbacks
+    bool EnterCallback();
+    void LeaveCallback();
+    bool WaitForCallbacks(DWORD timeoutMs = 5000);
+    int GetActiveCallbacksCount();
+
+    class CallbackGuard
+    {
+    public:
+        CallbackGuard()
+            : m_Entered(Main::EnterCallback())
+        {
+        }
+
+        ~CallbackGuard()
+        {
+            if (m_Entered)
+            {
+                Main::LeaveCallback();
+            }
+        }
+
+        CallbackGuard(const CallbackGuard&) = delete;
+        CallbackGuard& operator=(const CallbackGuard&) = delete;
+
+        bool IsActive() const
+        {
+            return m_Entered;
+        }
+
+    private:
+        bool m_Entered;
+    };
 }

@@ -5,9 +5,11 @@
 namespace Logger
 {
     static FILE* s_LogFile = nullptr;
+    static SRWLOCK s_LogLock = SRWLOCK_INIT;
 
     void Initialize()
     {
+        AcquireSRWLockExclusive(&s_LogLock);
         s_LogFile = fopen("somalia_debug.log", "w");
         OutputDebugStringA("[SOMALIA] Logger inicializado.\n");
         if (s_LogFile)
@@ -15,16 +17,19 @@ namespace Logger
             fputs("[SOMALIA] Logger inicializado.\n", s_LogFile);
             fflush(s_LogFile);
         }
+        ReleaseSRWLockExclusive(&s_LogLock);
     }
 
     void Shutdown()
     {
+        AcquireSRWLockExclusive(&s_LogLock);
         if (s_LogFile)
         {
             fflush(s_LogFile);
             fclose(s_LogFile);
             s_LogFile = nullptr;
         }
+        ReleaseSRWLockExclusive(&s_LogLock);
     }
 
     void Log(const char* fmt, ...)
@@ -39,10 +44,12 @@ namespace Logger
         snprintf(outBuf, sizeof(outBuf), "[SOMALIA] %s\n", buffer);
         OutputDebugStringA(outBuf);
 
+        AcquireSRWLockExclusive(&s_LogLock);
         if (s_LogFile)
         {
             fputs(outBuf, s_LogFile);
             fflush(s_LogFile);
         }
+        ReleaseSRWLockExclusive(&s_LogLock);
     }
 }

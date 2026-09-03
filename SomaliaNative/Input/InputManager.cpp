@@ -72,6 +72,14 @@ namespace InputManager
             return DefWindowProcA(hWnd, uMsg, wParam, lParam);
         }
 
+        Main::CallbackGuard guard;
+        if (!guard.IsActive())
+        {
+            if (s_oWndProc)
+                return CallWindowProcA(s_oWndProc, hWnd, uMsg, wParam, lParam);
+            return DefWindowProcA(hWnd, uMsg, wParam, lParam);
+        }
+
         // 1. Detecção da tecla de pânico (VK_END) para desinjetar instantaneamente
         if ((uMsg == WM_KEYDOWN || uMsg == WM_SYSKEYDOWN) && wParam == VK_END)
         {
@@ -167,9 +175,9 @@ namespace InputManager
         if (s_hWnd && s_oWndProc)
         {
             SetWindowLongPtrA(s_hWnd, GWLP_WNDPROC, (LONG_PTR)s_oWndProc);
-            s_oWndProc = NULL;
             s_hWnd = NULL;
             Logger::Log("WndProc restaurado.");
+            // Preserva s_oWndProc para fallback seguro em caso de repasse defensivo
         }
     }
 
