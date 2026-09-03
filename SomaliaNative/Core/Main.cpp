@@ -180,8 +180,10 @@ static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam)
     Logger::Log("[SOMALIA][UNLOAD] WAITING FOR ACTIVE CALLBACKS");
     if (!Main::WaitForCallbacks(5000))
     {
-        Logger::Log("[SOMALIA][UNLOAD] AVISO: Timeout aguardando callbacks ativos (restantes=%d).",
+        Logger::Log("[SOMALIA][UNLOAD] ERROR: Timeout aguardando callbacks ativos (restantes=%d).",
             Main::GetActiveCallbacksCount());
+        Logger::Log("[SOMALIA][UNLOAD] UNLOAD ABORTED: callbacks ainda ativos.");
+        return 0;
     }
     Logger::Log("[SOMALIA][UNLOAD] ACTIVE CALLBACKS DRAINED");
 
@@ -193,7 +195,13 @@ static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam)
     Logger::Log("[SOMALIA][UNLOAD] HOOKS RESTORED");
 
     // Drenagem final para garantir que nenhum callback in-flight no momento da restauração fique pendente
-    Main::WaitForCallbacks(1000);
+    if (!Main::WaitForCallbacks(1000))
+    {
+        Logger::Log("[SOMALIA][UNLOAD] ERROR: Timeout na drenagem pos-hooks (restantes=%d).",
+            Main::GetActiveCallbacksCount());
+        Logger::Log("[SOMALIA][UNLOAD] UNLOAD ABORTED: callbacks ainda ativos pos-hooks.");
+        return 0;
+    }
 
     // 11. Resetar módulos (resets já existentes)
     LocalMods::Reset();
