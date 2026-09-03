@@ -69,6 +69,10 @@ namespace Main
             return;
 
         s_hShutdownThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ShutdownWorkerThread, NULL, 0, NULL);
+        if (!s_hShutdownThread)
+        {
+            Logger::Log("[SOMALIA][UNLOAD] ERRO CRITICO: Falha ao criar ShutdownWorkerThread (GetLastError=0x%X).", GetLastError());
+        }
     }
 
     bool IsUnloaded()
@@ -132,7 +136,7 @@ namespace Main
         ReleaseSRWLockExclusive(&s_CallbackLock);
 
         if (!hEvent)
-            return true;
+            return false;
 
         DWORD res = WaitForSingleObject(hEvent, timeoutMs);
         return (res == WAIT_OBJECT_0);
