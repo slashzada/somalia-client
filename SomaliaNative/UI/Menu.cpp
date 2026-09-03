@@ -664,11 +664,93 @@ namespace Menu
         ImGui::EndChild();
     }
 
+    static std::string s_ConfigStatusMsg = "";
+    static uint64_t    s_ConfigStatusTime = 0;
+    static int         s_ConfigSelectedIdx = -1;
+
     // ─────────────────────────────────────────────────────────────
-    // ABA 6: MAIN — PLAYER MODS
+    // PAINEL COMPACTO DE CONFIGS (RENDERIZADO NA ABA MAIN)
+    // ─────────────────────────────────────────────────────────────
+    static void RenderCompactConfigPanel(const ImVec2& pos, const ImVec2& size)
+    {
+        ImGui::SetCursorPos(pos);
+        ImGui::MenuChild("Configs", size);
+        {
+            ImGui::Spacing();
+            ImGui::TextColored(Theme::TextMuted, "Config Name");
+            ImGui::InputText("##compactCfgName", g_MenuState.misc.configName, sizeof(g_MenuState.misc.configName));
+            ImGui::Spacing();
+
+            // SAVE & LOAD (LOCAL JSON)
+            if (ImGui::Button("SAVE", ImVec2(136, 26)))
+            {
+                std::string name = g_MenuState.misc.configName;
+                if (name.empty()) name = "somalia_config";
+                if (ConfigManager::SaveConfig(name))
+                    s_ConfigStatusMsg = "Config salva: " + name + ".json";
+                else
+                    s_ConfigStatusMsg = "Falha ao salvar config.";
+                s_ConfigStatusTime = GetTickCount64();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("LOAD", ImVec2(136, 26)))
+            {
+                std::string name = g_MenuState.misc.configName;
+                if (name.empty()) name = "somalia_config";
+                if (ConfigManager::LoadConfig(name))
+                    s_ConfigStatusMsg = "Config carregada: " + name + ".json";
+                else
+                    s_ConfigStatusMsg = "Falha ao carregar config.";
+                s_ConfigStatusTime = GetTickCount64();
+            }
+
+            // DELETE & REFRESH
+            if (ImGui::Button("DELETE", ImVec2(136, 24)))
+            {
+                std::string name = g_MenuState.misc.configName;
+                if (!name.empty() && ConfigManager::DeleteConfig(name))
+                    s_ConfigStatusMsg = "Config deletada: " + name + ".json";
+                s_ConfigStatusTime = GetTickCount64();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("REFRESH", ImVec2(136, 24)))
+            {
+                ConfigManager::Refresh();
+                s_ConfigStatusMsg = "Lista atualizada.";
+                s_ConfigStatusTime = GetTickCount64();
+            }
+
+            ImGui::Spacing();
+            ImGui::TextColored(Theme::TextMuted, "Configs Disponiveis:");
+            const auto& configs = ConfigManager::GetConfigList();
+            ImGui::BeginChild("##compactCfgList", ImVec2(280, 75), true);
+            for (size_t i = 0; i < configs.size(); i++)
+            {
+                bool isSelected = (s_ConfigSelectedIdx == static_cast<int>(i)) ||
+                                  (strcmp(g_MenuState.misc.configName, configs[i].c_str()) == 0);
+                if (ImGui::Selectable(configs[i].c_str(), isSelected))
+                {
+                    s_ConfigSelectedIdx = static_cast<int>(i);
+                    strncpy_s(g_MenuState.misc.configName, configs[i].c_str(), sizeof(g_MenuState.misc.configName) - 1);
+                }
+            }
+            ImGui::EndChild();
+
+            if (!s_ConfigStatusMsg.empty() && (GetTickCount64() - s_ConfigStatusTime < 4000))
+            {
+                ImGui::Spacing();
+                ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.4f, 1.0f), s_ConfigStatusMsg.c_str());
+            }
+        }
+        ImGui::EndChild();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ABA 6: MAIN — PLAYER MODS & QUICK CONFIGS
     // ─────────────────────────────────────────────────────────────
     static void RenderPlayerModsTab()
     {
+        // 1. Atributos do Jogador Local (Painel Esquerdo Preservado)
         ImGui::SetCursorPos(ImVec2(169, 38));
         ImGui::MenuChild("Local Player Attributes", ImVec2(320, 482));
         {
@@ -689,8 +771,12 @@ namespace Menu
         }
         ImGui::EndChild();
 
-        ImGui::SetCursorPos(ImVec2(505, 38));
-        ImGui::MenuChild("Combat Helpers", ImVec2(320, 482));
+        // 2. Painel Compacto de Configs (Canto Superior Direito)
+        RenderCompactConfigPanel(ImVec2(505, 38), ImVec2(320, 275));
+
+        // 3. Assistências de Combate (Canto Inferior Direito Preservado)
+        ImGui::SetCursorPos(ImVec2(505, 323));
+        ImGui::MenuChild("Combat Helpers", ImVec2(320, 197));
         {
             ImGui::Spacing();
             ImGui::Checkbox("Fast Weapon Reload", &g_MenuState.player.fastReload);
@@ -816,10 +902,6 @@ namespace Menu
             s_LoggedRender = true;
         }
 
-        static std::string s_StatusMsg = "";
-        static uint64_t s_StatusTime = 0;
-        static int s_SelectedConfigIdx = -1;
-
         ImGui::SetCursorPos(ImVec2(169, 38));
         ImGui::MenuChild("Configuration Presets", ImVec2(320, 482));
         {
@@ -834,15 +916,15 @@ namespace Menu
             {
                 std::string name = g_MenuState.misc.configName;
                 if (name.empty()) name = "default";
-                Config::SaveToCloud(name, s_StatusMsg);
-                s_StatusTime = GetTickCount64();
+                Config::SaveToCloud(name, s_ConfigStatusMsg);
+                s_ConfigStatusTime = GetTickCount64();
             }
             if (ImGui::Button("LOAD CONFIG (CLOUD)", ImVec2(280, 28)))
             {
                 std::string name = g_MenuState.misc.configName;
                 if (name.empty()) name = "default";
-                Config::LoadFromCloud(name, s_StatusMsg);
-                s_StatusTime = GetTickCount64();
+                Config::LoadFromCloud(name, s_ConfigStatusMsg);
+                s_ConfigStatusTime = GetTickCount64();
             }
 
             ImGui::Spacing();
@@ -856,10 +938,10 @@ namespace Menu
                 std::string name = g_MenuState.misc.configName;
                 if (name.empty()) name = "somalia_config";
                 if (ConfigManager::SaveConfig(name))
-                    s_StatusMsg = "Config salva: " + name + ".json";
+                    s_ConfigStatusMsg = "Config salva: " + name + ".json";
                 else
-                    s_StatusMsg = "Falha ao salvar config.";
-                s_StatusTime = GetTickCount64();
+                    s_ConfigStatusMsg = "Falha ao salvar config.";
+                s_ConfigStatusTime = GetTickCount64();
             }
             ImGui::SameLine();
             if (ImGui::Button("LOAD CONFIG (LOCAL)", ImVec2(136, 26)))
@@ -867,25 +949,25 @@ namespace Menu
                 std::string name = g_MenuState.misc.configName;
                 if (name.empty()) name = "somalia_config";
                 if (ConfigManager::LoadConfig(name))
-                    s_StatusMsg = "Config carregada: " + name + ".json";
+                    s_ConfigStatusMsg = "Config carregada: " + name + ".json";
                 else
-                    s_StatusMsg = "Falha ao carregar config.";
-                s_StatusTime = GetTickCount64();
+                    s_ConfigStatusMsg = "Falha ao carregar config.";
+                s_ConfigStatusTime = GetTickCount64();
             }
 
             if (ImGui::Button("DELETE CONFIG", ImVec2(136, 24)))
             {
                 std::string name = g_MenuState.misc.configName;
                 if (!name.empty() && ConfigManager::DeleteConfig(name))
-                    s_StatusMsg = "Config deletada: " + name + ".json";
-                s_StatusTime = GetTickCount64();
+                    s_ConfigStatusMsg = "Config deletada: " + name + ".json";
+                s_ConfigStatusTime = GetTickCount64();
             }
             ImGui::SameLine();
             if (ImGui::Button("REFRESH", ImVec2(136, 24)))
             {
                 ConfigManager::Refresh();
-                s_StatusMsg = "Lista atualizada.";
-                s_StatusTime = GetTickCount64();
+                s_ConfigStatusMsg = "Lista atualizada.";
+                s_ConfigStatusTime = GetTickCount64();
             }
 
             ImGui::Spacing();
@@ -894,20 +976,20 @@ namespace Menu
             ImGui::BeginChild("##cfgList", ImVec2(280, 100), true);
             for (size_t i = 0; i < configs.size(); i++)
             {
-                bool isSelected = (s_SelectedConfigIdx == static_cast<int>(i)) ||
+                bool isSelected = (s_ConfigSelectedIdx == static_cast<int>(i)) ||
                                   (strcmp(g_MenuState.misc.configName, configs[i].c_str()) == 0);
                 if (ImGui::Selectable(configs[i].c_str(), isSelected))
                 {
-                    s_SelectedConfigIdx = static_cast<int>(i);
+                    s_ConfigSelectedIdx = static_cast<int>(i);
                     strncpy_s(g_MenuState.misc.configName, configs[i].c_str(), sizeof(g_MenuState.misc.configName) - 1);
                 }
             }
             ImGui::EndChild();
 
-            if (!s_StatusMsg.empty() && (GetTickCount64() - s_StatusTime < 5000))
+            if (!s_ConfigStatusMsg.empty() && (GetTickCount64() - s_ConfigStatusTime < 5000))
             {
                 ImGui::Spacing();
-                ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.4f, 1.0f), s_StatusMsg.c_str());
+                ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.4f, 1.0f), s_ConfigStatusMsg.c_str());
             }
         }
         ImGui::EndChild();
@@ -927,8 +1009,8 @@ namespace Menu
             if (ImGui::Button("Resetar Padroes", ImVec2(280, 26)))
             {
                 Config::ResetToDefaults();
-                s_StatusMsg = "Padroes restaurados.";
-                s_StatusTime = GetTickCount64();
+                s_ConfigStatusMsg = "Padroes restaurados.";
+                s_ConfigStatusTime = GetTickCount64();
             }
             ImGui::Spacing();
             ImGui::Separator();
