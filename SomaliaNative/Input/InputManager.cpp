@@ -64,15 +64,8 @@ namespace InputManager
 
     LRESULT CALLBACK hkWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
-        // Se estiver em processo de shutdown, encaminha diretamente para o WndProc original
-        if (Main::IsShuttingDown())
-        {
-            if (s_oWndProc)
-                return CallWindowProcA(s_oWndProc, hWnd, uMsg, wParam, lParam);
-            return DefWindowProcA(hWnd, uMsg, wParam, lParam);
-        }
-
         Main::CallbackGuard guard;
+
         if (!guard.IsActive())
         {
             if (s_oWndProc)

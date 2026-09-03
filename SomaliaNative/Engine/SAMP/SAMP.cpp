@@ -811,17 +811,13 @@ namespace SAMP
 
     static bool __fastcall Hooked_SendBitStream(void* pThis, void* edx, void* pBitStream, int priority, int reliability, char orderingChannel)
     {
+        Main::CallbackGuard guard;
+
         if (!s_OriginalSendBitStream)
         {
             return false;
         }
 
-        if (Main::IsShuttingDown())
-        {
-            return s_OriginalSendBitStream(pThis, pBitStream, priority, reliability, orderingChannel);
-        }
-
-        Main::CallbackGuard guard;
         if (!guard.IsActive())
         {
             return s_OriginalSendBitStream(pThis, pBitStream, priority, reliability, orderingChannel);
@@ -870,17 +866,13 @@ namespace SAMP
 
     static bool __fastcall Hooked_SendData(void* pThis, void* edx, const char* data, int length, int priority, int reliability, char orderingChannel)
     {
+        Main::CallbackGuard guard;
+
         if (!s_OriginalSendData)
         {
             return false;
         }
 
-        if (Main::IsShuttingDown())
-        {
-            return s_OriginalSendData(pThis, data, length, priority, reliability, orderingChannel);
-        }
-
-        Main::CallbackGuard guard;
         if (!guard.IsActive())
         {
             return s_OriginalSendData(pThis, data, length, priority, reliability, orderingChannel);

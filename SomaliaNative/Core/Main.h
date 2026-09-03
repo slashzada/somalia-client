@@ -30,16 +30,13 @@ namespace Main
     {
     public:
         CallbackGuard()
-            : m_Entered(Main::EnterCallback())
+            : m_CanExecute(Main::EnterCallback())
         {
         }
 
         ~CallbackGuard()
         {
-            if (m_Entered)
-            {
-                Main::LeaveCallback();
-            }
+            Main::LeaveCallback();
         }
 
         CallbackGuard(const CallbackGuard&) = delete;
@@ -47,10 +44,10 @@ namespace Main
 
         bool IsActive() const
         {
-            return m_Entered;
+            return m_CanExecute;
         }
 
     private:
-        bool m_Entered;
+        bool m_CanExecute;
     };
 }

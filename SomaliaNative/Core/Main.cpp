@@ -19,6 +19,7 @@ static HMODULE s_hModule = NULL;
 static std::atomic<ShutdownState> s_ShutdownState(ShutdownState::Running);
 static HANDLE s_hInitThread = nullptr;
 static HANDLE s_hShutdownThread = nullptr;
+static HANDLE s_hCancelInitEvent = nullptr;
 static SRWLOCK s_CallbackLock = SRWLOCK_INIT;
 static int s_ActiveCallbacks = 0;
 static HANDLE s_hZeroCallbacksEvent = nullptr;
@@ -88,20 +89,15 @@ namespace Main
     bool EnterCallback()
     {
         AcquireSRWLockExclusive(&s_CallbackLock);
-        if (s_ShutdownState.load() != ShutdownState::Running)
-        {
-            ReleaseSRWLockExclusive(&s_CallbackLock);
-            return false;
-        }
-
         s_ActiveCallbacks++;
         HANDLE hEvent = GetOrCreateZeroCallbacksEvent();
         if (hEvent)
         {
             ResetEvent(hEvent);
         }
+        bool canExecuteInternal = (s_ShutdownState.load() == ShutdownState::Running);
         ReleaseSRWLockExclusive(&s_CallbackLock);
-        return true;
+        return canExecuteInternal;
     }
 
     void LeaveCallback()
@@ -155,24 +151,32 @@ static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam)
 {
     Logger::Log("[SOMALIA][UNLOAD] STOPPING");
 
-    // ETAPA 3: Bloquear novos callbacks de executar lógica do Somalia.
-    // Garantido pois s_ShutdownState == Stopping, fazendo EnterCallback() e IsShuttingDown() recusarem novas execuções.
+    // 4. Bloquear lógica interna de novos callbacks:
+    // Já garantido pois s_ShutdownState == Stopping, fazendo CallbackGuard::IsActive() retornar false para novos callbacks.
 
-    // ETAPA 4 & 5: Parar e aguardar InitializationThread
+    // 5 & 6. Sinalizar cancelamento e aguardar cooperativamente a InitializationThread
     Logger::Log("[SOMALIA][UNLOAD] THREADS STOP REQUESTED");
+    if (s_hCancelInitEvent)
+    {
+        SetEvent(s_hCancelInitEvent);
+    }
+
     if (s_hInitThread != nullptr)
     {
-        DWORD waitResult = WaitForSingleObject(s_hInitThread, 3000);
-        if (waitResult == WAIT_TIMEOUT)
+        DWORD waitResult = WaitForSingleObject(s_hInitThread, 5000);
+        if (waitResult != WAIT_OBJECT_0)
         {
-            Logger::Log("[SOMALIA][UNLOAD] AVISO: Timeout ao aguardar InitializationThread.");
+            Logger::Log("[SOMALIA][UNLOAD] ERRO CRITICO: InitializationThread nao finalizou cooperativamente (waitResult=0x%X). Unload abortado por seguranca.", waitResult);
+            // Seguranca absoluta: nunca fechar handle nem chamar FreeLibraryAndExitThread com thread viva!
+            return 0;
         }
+
         CloseHandle(s_hInitThread);
         s_hInitThread = nullptr;
+        Logger::Log("[SOMALIA][UNLOAD] THREAD InitializationThread STOPPED");
     }
-    Logger::Log("[SOMALIA][UNLOAD] THREAD InitializationThread STOPPED");
 
-    // ETAPA 5.1: Aguardar término de todos os callbacks ativos em execução
+    // 7. Aguardar ActiveCallbacks == 0
     Logger::Log("[SOMALIA][UNLOAD] WAITING FOR ACTIVE CALLBACKS");
     if (!Main::WaitForCallbacks(5000))
     {
@@ -181,17 +185,17 @@ static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam)
     }
     Logger::Log("[SOMALIA][UNLOAD] ACTIVE CALLBACKS DRAINED");
 
-    // ETAPA 7: Restaurar hooks (ordem mínima: D3D9, WndProc, SAMP/Rak hook)
+    // 8, 9, 10. Restaurar hooks (D3D9, WndProc, SAMP/Rak hook)
     Logger::Log("[SOMALIA][UNLOAD] RESTORING HOOKS");
     D3D9Hook::RestoreHooks();
     InputManager::RestoreWndProc();
     SAMP::Shutdown();
     Logger::Log("[SOMALIA][UNLOAD] HOOKS RESTORED");
 
-    // ETAPA 8: Permitir pequena drenagem de callbacks como margem defensiva adicional
-    Sleep(100);
+    // Drenagem final para garantir que nenhum callback in-flight no momento da restauração fique pendente
+    Main::WaitForCallbacks(1000);
 
-    // ETAPA 9: Resetar módulos (resets já existentes)
+    // 11. Resetar módulos (resets já existentes)
     LocalMods::Reset();
     Slide::Reset();
     AntiAim::Reset();
@@ -200,19 +204,19 @@ static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam)
     RageBot::Reset();
     InputManager::Shutdown();
 
-    // ETAPA 10: Destruir UI (Menu, ImGui DX9, ImGui Win32, ImGui Context)
+    // 12. Destruir UI (Menu, ImGui DX9, ImGui Win32, ImGui Context)
     Logger::Log("[SOMALIA][UNLOAD] DESTROYING UI");
     D3D9Hook::DestroyUI();
 
-    // ETAPA 11: Marcar Stopped
+    // Marcar Stopped
     s_ShutdownState.store(ShutdownState::Stopped);
     Logger::Log("[SOMALIA][UNLOAD] STOPPED");
 
-    // ETAPA 12: Fechar logger
+    // 13. Fechar logger
     Logger::Log("[SOMALIA][UNLOAD] FREE LIBRARY");
     Logger::Shutdown();
 
-    // Fechar event handle de sincronização de callbacks
+    // Fechar handles de sincronização
     AcquireSRWLockExclusive(&s_CallbackLock);
     if (s_hZeroCallbacksEvent)
     {
@@ -221,7 +225,13 @@ static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam)
     }
     ReleaseSRWLockExclusive(&s_CallbackLock);
 
-    // ETAPA 13: Executar FreeLibraryAndExitThread(...) em um único local controlado
+    if (s_hCancelInitEvent)
+    {
+        CloseHandle(s_hCancelInitEvent);
+        s_hCancelInitEvent = nullptr;
+    }
+
+    // 14. Executar FreeLibraryAndExitThread(...) em um único local controlado
     HANDLE hSelf = s_hShutdownThread;
     s_hShutdownThread = nullptr;
     if (hSelf)
@@ -239,11 +249,30 @@ static DWORD WINAPI InitializationThread(LPVOID lpParam)
     RuntimeState::Initialize();
     Logger::Log("Native inicializando...");
 
-    // 1. Aguarda defensivamente o GTA SA criar a janela e o dispositivo D3D9
+    // 1. Aguarda defensivamente o GTA SA criar a janela e o dispositivo D3D9 com cancelamento cooperativo
     int waitLimit = 200; // ~20 segundos
-    while (!GTA::IsReady() && waitLimit > 0 && !Main::IsShuttingDown())
+    while (!GTA::IsReady() && waitLimit > 0)
     {
-        Sleep(100);
+        if (Main::IsShuttingDown())
+        {
+            Logger::Log("[SOMALIA][UNLOAD] InitializationThread cancellation detected");
+            return 0;
+        }
+
+        if (s_hCancelInitEvent)
+        {
+            DWORD wr = WaitForSingleObject(s_hCancelInitEvent, 100);
+            if (wr == WAIT_OBJECT_0 || Main::IsShuttingDown())
+            {
+                Logger::Log("[SOMALIA][UNLOAD] InitializationThread cancellation detected");
+                return 0;
+            }
+        }
+        else
+        {
+            Sleep(100);
+        }
+
         waitLimit--;
     }
 
@@ -295,6 +324,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
     case DLL_PROCESS_ATTACH:
         s_hModule = hModule;
         DisableThreadLibraryCalls(hModule);
+        s_hCancelInitEvent = CreateEventA(NULL, TRUE, FALSE, NULL);
         s_hInitThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)InitializationThread, NULL, 0, NULL);
         break;
 

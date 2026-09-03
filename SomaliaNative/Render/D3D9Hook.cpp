@@ -31,12 +31,8 @@ namespace D3D9Hook
 
     static HRESULT __stdcall hkReset(IDirect3DDevice9* pDevice, D3DPRESENT_PARAMETERS* pPresentationParameters)
     {
-        if (Main::IsShuttingDown())
-        {
-            return s_oReset ? s_oReset(pDevice, pPresentationParameters) : D3D_OK;
-        }
-
         Main::CallbackGuard guard;
+
         if (!guard.IsActive())
         {
             return s_oReset ? s_oReset(pDevice, pPresentationParameters) : D3D_OK;
@@ -64,21 +60,14 @@ namespace D3D9Hook
 
     static HRESULT __stdcall hkPresent(IDirect3DDevice9* pDevice, const RECT* pSourceRect, const RECT* pDestRect, HWND hDestWindowOverride, const RGNDATA* pDirtyRegion)
     {
-        if (!pDevice)
-            return s_oPresent ? s_oPresent(pDevice, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion) : D3D_OK;
+        Main::CallbackGuard guard;
 
-        if (Main::IsShuttingDown())
+        if (!pDevice || !guard.IsActive())
         {
             if (Main::IsStopRequested())
             {
                 Main::BeginShutdown();
             }
-            return s_oPresent ? s_oPresent(pDevice, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion) : D3D_OK;
-        }
-
-        Main::CallbackGuard guard;
-        if (!guard.IsActive())
-        {
             return s_oPresent ? s_oPresent(pDevice, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion) : D3D_OK;
         }
 
