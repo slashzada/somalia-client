@@ -1,4 +1,5 @@
 #include "InputManager.h"
+#include <atomic>
 #include "../Config/Config.h"
 #include "../Core/Logger.h"
 #include "../Core/Main.h"
@@ -63,10 +64,18 @@ namespace InputManager
 
     LRESULT CALLBACK hkWndProc(HWND hWnd, UINT uMsg, WPARAM wParam, LPARAM lParam)
     {
+        // Se estiver em processo de shutdown, encaminha diretamente para o WndProc original
+        if (Main::IsShuttingDown())
+        {
+            if (s_oWndProc)
+                return CallWindowProcA(s_oWndProc, hWnd, uMsg, wParam, lParam);
+            return DefWindowProcA(hWnd, uMsg, wParam, lParam);
+        }
+
         // 1. Detecção da tecla de pânico (VK_END) para desinjetar instantaneamente
         if ((uMsg == WM_KEYDOWN || uMsg == WM_SYSKEYDOWN) && wParam == VK_END)
         {
-            Main::UnloadAndExit();
+            Main::RequestUnload();
             return 0;
         }
 
@@ -149,12 +158,11 @@ namespace InputManager
         Logger::Log("WndProc subclassed com sucesso na janela 0x%p", (void*)s_hWnd);
     }
 
-    void Shutdown()
+    void RestoreWndProc()
     {
-        if (g_MenuState.menuOpen)
-        {
-            ToggleMenu(false);
-        }
+        static std::atomic<bool> s_WndProcRestored(false);
+        if (s_WndProcRestored.exchange(true))
+            return;
 
         if (s_hWnd && s_oWndProc)
         {
@@ -163,6 +171,16 @@ namespace InputManager
             s_hWnd = NULL;
             Logger::Log("WndProc restaurado.");
         }
+    }
+
+    void Shutdown()
+    {
+        if (g_MenuState.menuOpen)
+        {
+            ToggleMenu(false);
+        }
+
+        RestoreWndProc();
     }
 
     bool IsMenuOpen()

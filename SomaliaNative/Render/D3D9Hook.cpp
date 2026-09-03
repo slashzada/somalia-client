@@ -31,17 +31,22 @@ namespace D3D9Hook
 
     static HRESULT __stdcall hkReset(IDirect3DDevice9* pDevice, D3DPRESENT_PARAMETERS* pPresentationParameters)
     {
+        if (Main::IsShuttingDown())
+        {
+            return s_oReset ? s_oReset(pDevice, pPresentationParameters) : D3D_OK;
+        }
+
         if (s_bImGuiInitialized)
         {
             ImGui_ImplDX9_InvalidateDeviceObjects();
             Menu::InvalidateDeviceObjects();
         }
 
-        HRESULT hr = s_oReset(pDevice, pPresentationParameters);
+        HRESULT hr = s_oReset ? s_oReset(pDevice, pPresentationParameters) : D3D_OK;
 
         if (SUCCEEDED(hr))
         {
-            if (s_bImGuiInitialized)
+            if (s_bImGuiInitialized && !Main::IsShuttingDown())
             {
                 ImGui_ImplDX9_CreateDeviceObjects();
                 Menu::CreateDeviceObjects(pDevice);
@@ -54,13 +59,15 @@ namespace D3D9Hook
     static HRESULT __stdcall hkPresent(IDirect3DDevice9* pDevice, const RECT* pSourceRect, const RECT* pDestRect, HWND hDestWindowOverride, const RGNDATA* pDirtyRegion)
     {
         if (!pDevice)
-            return s_oPresent(pDevice, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion);
+            return s_oPresent ? s_oPresent(pDevice, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion) : D3D_OK;
 
         if (Main::IsShuttingDown())
         {
-            tPresent oPres = s_oPresent;
-            Shutdown();
-            return (oPres ? oPres(pDevice, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion) : D3D_OK);
+            if (Main::IsStopRequested())
+            {
+                Main::BeginShutdown();
+            }
+            return s_oPresent ? s_oPresent(pDevice, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion) : D3D_OK;
         }
 
         // 0. Atualiza ciclo de vida e estado do jogador
@@ -159,27 +166,12 @@ namespace D3D9Hook
         return true;
     }
 
-    void Shutdown()
+    void RestoreHooks()
     {
-        static std::atomic<bool> s_AlreadyShutdown(false);
-        if (s_AlreadyShutdown.exchange(true)) return;
+        static std::atomic<bool> s_HooksRestored(false);
+        if (s_HooksRestored.exchange(true))
+            return;
 
-        Logger::Log("[SOMALIA][UNLOAD] FEATURES_STOPPED");
-
-        // 1. Reseta e limpa todos os módulos
-        LocalMods::Reset();
-        Slide::Reset();
-        AntiAim::Reset();
-        AimAssist::Reset();
-        Aimbot::ClearTarget();
-        RageBot::Reset();
-        SAMP::Shutdown();
-
-        // 2. Restaura o WndProc original e o cursor nativo
-        InputManager::Shutdown();
-        Logger::Log("[SOMALIA][UNLOAD] WNDPROC_RESTORED");
-
-        // 3. Restaura os ponteiros originais da VTable do D3D9
         if (s_pVTable)
         {
             DWORD oldProtect;
@@ -201,10 +193,15 @@ namespace D3D9Hook
             }
 
             s_pVTable = nullptr;
-            Logger::Log("[SOMALIA][UNLOAD] HOOKS_REMOVED");
         }
+    }
 
-        // 4. Destrói backends e contexto ImGui
+    void DestroyUI()
+    {
+        static std::atomic<bool> s_UIDestroyed(false);
+        if (s_UIDestroyed.exchange(true))
+            return;
+
         if (s_bImGuiInitialized)
         {
             Menu::Shutdown();
@@ -212,18 +209,12 @@ namespace D3D9Hook
             ImGui_ImplWin32_Shutdown();
             ImGui::DestroyContext();
             s_bImGuiInitialized = false;
-            Logger::Log("[SOMALIA][UNLOAD] IMGUI_SHUTDOWN");
         }
+    }
 
-        Logger::Log("[SOMALIA][UNLOAD] THREADS_STOPPED");
-        Logger::Log("[SOMALIA][UNLOAD] COMPLETE");
-
-        // 5. Inicia thread externa descolada para ejetar a DLL da memória com segurança
-        CreateThread(NULL, 0, [](LPVOID) -> DWORD {
-            Sleep(150);
-            Logger::Shutdown();
-            FreeLibraryAndExitThread(Main::GetModuleInstance(), 0);
-            return 0;
-        }, NULL, 0, NULL);
+    void Shutdown()
+    {
+        RestoreHooks();
+        DestroyUI();
     }
 }

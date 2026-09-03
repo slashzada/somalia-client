@@ -9,7 +9,9 @@ def run_tests():
     print("[TESTE 1] Auditoria Estática de Isolamento de Código e Símbolos")
     print("================================================================")
 
-    base_dir = r"c:\Users\Administrator\Documents\projetos\gerais\somalia showcase\somalia showcase\SomaliaNative"
+    base_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "SomaliaNative")
+    if not os.path.exists(base_dir):
+        base_dir = r"c:\Users\Administrator\Documents\projetos\gerais\somalia showcase\somalia showcase\SomaliaNative"
     config_h = os.path.join(base_dir, "Config", "Config.h")
     config_cpp = os.path.join(base_dir, "Config", "Config.cpp")
     aimbot_cpp = os.path.join(base_dir, "Features", "Aimbot", "Aimbot.cpp")

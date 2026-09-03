@@ -5,5 +5,7 @@
 namespace D3D9Hook
 {
     bool Initialize();
+    void RestoreHooks();
+    void DestroyUI();
     void Shutdown();
 }

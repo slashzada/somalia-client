@@ -8,14 +8,20 @@ namespace Logger
 
     void Initialize()
     {
-        // Safe local logging to OutputDebugString and optional log file
+        s_LogFile = fopen("somalia_debug.log", "w");
         OutputDebugStringA("[SOMALIA] Logger inicializado.\n");
+        if (s_LogFile)
+        {
+            fputs("[SOMALIA] Logger inicializado.\n", s_LogFile);
+            fflush(s_LogFile);
+        }
     }
 
     void Shutdown()
     {
         if (s_LogFile)
         {
+            fflush(s_LogFile);
             fclose(s_LogFile);
             s_LogFile = nullptr;
         }
@@ -32,6 +38,11 @@ namespace Logger
         char outBuf[1100];
         snprintf(outBuf, sizeof(outBuf), "[SOMALIA] %s\n", buffer);
         OutputDebugStringA(outBuf);
-        // Escrita em arquivo .log desabilitada a pedido do usuário
+
+        if (s_LogFile)
+        {
+            fputs(outBuf, s_LogFile);
+            fflush(s_LogFile);
+        }
     }
 }

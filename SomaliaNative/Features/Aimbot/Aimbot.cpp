@@ -154,7 +154,16 @@ namespace Aimbot
         bool isSilentActive = false;
         if (g_MenuState.silentAim.enabled)
         {
-            SAMP::EnsureRakHook();
+            bool hookOk = SAMP::EnsureRakHook();
+            static uint64_t s_lastHookDiagTick = 0;
+            uint64_t nowTick = GetTickCount64();
+            if (nowTick - s_lastHookDiagTick >= 3000)
+            {
+                Logger::Log("[AIMBOT][DIAG] EnsureRakHook() invocado -> retorno=%s | isHooked=%d",
+                    hookOk ? "TRUE" : "FALSE", SAMP::IsRakHooked() ? 1 : 0);
+                s_lastHookDiagTick = nowTick;
+            }
+
             const auto& sw = g_MenuState.silentAim.weapons[activeGroup];
             if (sw.enabled)
             {

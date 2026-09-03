@@ -1,5 +1,6 @@
 #include "RuntimeState.h"
 #include "Logger.h"
+#include "Main.h"
 #include "../Engine/GTA/GTA.h"
 #include "../Features/Aimbot/Aimbot.h"
 #include "../Features/Aimbot/AimAssist.h"
@@ -10,21 +11,30 @@
 
 namespace RuntimeState
 {
+    static SRWLOCK s_StateLock = SRWLOCK_INIT;
     static PlayerLifeState s_State = PlayerLifeState::UNKNOWN;
+    static void* s_CurrentLocalPed = nullptr;
     static void* s_LastLocalPed = nullptr;
     static uint64_t s_LastStateChangeTick = 0;
 
     void Initialize()
     {
+        AcquireSRWLockExclusive(&s_StateLock);
         s_State = PlayerLifeState::UNKNOWN;
+        s_CurrentLocalPed = nullptr;
         s_LastLocalPed = nullptr;
         s_LastStateChangeTick = GetTickCount64();
+        ReleaseSRWLockExclusive(&s_StateLock);
+
         Logger::Log("[SOMALIA][LIFECYCLE] RuntimeState inicializado.");
     }
 
     PlayerLifeState GetState()
     {
-        return s_State;
+        AcquireSRWLockShared(&s_StateLock);
+        PlayerLifeState state = s_State;
+        ReleaseSRWLockShared(&s_StateLock);
+        return state;
     }
 
     const char* GetStateName(PlayerLifeState state)
@@ -57,7 +67,7 @@ namespace RuntimeState
         }
     }
 
-    void* GetLocalPed()
+    static void* ReadRawLocalPed()
     {
         __try
         {
@@ -73,10 +83,9 @@ namespace RuntimeState
         }
     }
 
-    bool IsPlayerAlive()
+    static bool CheckRawPedAlive(void* pPed)
     {
-        void* pPed = GetLocalPed();
-        if (!pPed) return false;
+        if (!pPed || !IsValidPed(pPed)) return false;
 
         __try
         {
@@ -96,14 +105,62 @@ namespace RuntimeState
         }
     }
 
+    void* GetLocalPed()
+    {
+        if (Main::IsShuttingDown())
+            return nullptr;
+
+        AcquireSRWLockShared(&s_StateLock);
+        // Durante DEAD, RESPAWNING ou estados desconhecidos, ped DEVE ser nullptr
+        if (s_State == PlayerLifeState::DEAD ||
+            s_State == PlayerLifeState::RESPAWNING ||
+            s_State == PlayerLifeState::UNKNOWN ||
+            s_State == PlayerLifeState::DISCONNECTED)
+        {
+            ReleaseSRWLockShared(&s_StateLock);
+            return nullptr;
+        }
+
+        void* pPed = s_CurrentLocalPed;
+        ReleaseSRWLockShared(&s_StateLock);
+        return pPed;
+    }
+
+    bool IsPlayerAlive()
+    {
+        if (Main::IsShuttingDown())
+            return false;
+
+        AcquireSRWLockShared(&s_StateLock);
+        if (s_State == PlayerLifeState::DEAD ||
+            s_State == PlayerLifeState::RESPAWNING ||
+            s_State == PlayerLifeState::UNKNOWN ||
+            s_State == PlayerLifeState::DISCONNECTED)
+        {
+            ReleaseSRWLockShared(&s_StateLock);
+            return false;
+        }
+
+        bool alive = (s_State == PlayerLifeState::ALIVE || s_State == PlayerLifeState::ALIVE_AFTER_RESPAWN) &&
+                     (s_CurrentLocalPed != nullptr);
+        ReleaseSRWLockShared(&s_StateLock);
+        return alive;
+    }
+
     bool IsRespawning()
     {
-        return (s_State == PlayerLifeState::RESPAWNING);
+        AcquireSRWLockShared(&s_StateLock);
+        bool respawning = (s_State == PlayerLifeState::RESPAWNING);
+        ReleaseSRWLockShared(&s_StateLock);
+        return respawning;
     }
 
     bool IsDead()
     {
-        return (s_State == PlayerLifeState::DEAD);
+        AcquireSRWLockShared(&s_StateLock);
+        bool dead = (s_State == PlayerLifeState::DEAD);
+        ReleaseSRWLockShared(&s_StateLock);
+        return dead;
     }
 
     void OnPlayerDeath()
@@ -116,11 +173,17 @@ namespace RuntimeState
         Slide::Reset();
         AntiAim::Reset();
         LocalMods::Reset();
-        s_LastLocalPed = nullptr;
     }
 
     void OnPlayerRespawn()
     {
+        // UNLOAD DURANTE RESPAWN: Não permitir que OnPlayerRespawn reative módulos se shutdown estiver ativo
+        if (Main::IsShuttingDown())
+        {
+            Logger::Log("[SOMALIA][LIFECYCLE] OnPlayerRespawn ignorado: shutdown em andamento.");
+            return;
+        }
+
         Logger::Log("[SOMALIA][LIFECYCLE] Respawn concluido: restabelecendo estado operacional.");
         Aimbot::ClearTarget();
         AimAssist::Reset();
@@ -131,71 +194,111 @@ namespace RuntimeState
 
     void Update()
     {
-        void* pPed = GetLocalPed();
+        if (Main::IsShuttingDown())
+            return;
+
+        void* rawPed = ReadRawLocalPed();
+        bool rawAlive = CheckRawPedAlive(rawPed);
+
+        AcquireSRWLockExclusive(&s_StateLock);
+
         PlayerLifeState oldState = s_State;
         PlayerLifeState newState = s_State;
+        void* newPedContext = nullptr;
 
-        if (!pPed)
+        if (!rawPed)
         {
             if (s_State == PlayerLifeState::DEAD || s_State == PlayerLifeState::RESPAWNING)
             {
                 newState = PlayerLifeState::RESPAWNING;
+                newPedContext = nullptr;
             }
             else
             {
                 newState = PlayerLifeState::DISCONNECTED;
+                newPedContext = nullptr;
             }
         }
         else
         {
-            bool alive = IsPlayerAlive();
-            if (alive)
+            if (rawAlive)
             {
                 if (s_State == PlayerLifeState::DEAD || s_State == PlayerLifeState::RESPAWNING)
                 {
+                    // Respawn: novo ped detectado com HP > 0 e estado válido
                     newState = PlayerLifeState::ALIVE_AFTER_RESPAWN;
+                    newPedContext = rawPed;
                 }
                 else if (s_State == PlayerLifeState::ALIVE_AFTER_RESPAWN)
                 {
                     newState = PlayerLifeState::ALIVE;
+                    newPedContext = rawPed;
                 }
                 else
                 {
                     newState = PlayerLifeState::ALIVE;
+                    newPedContext = rawPed;
                 }
             }
             else
             {
+                // rawAlive é falso (morte do ped)
                 if (s_State == PlayerLifeState::ALIVE || s_State == PlayerLifeState::ALIVE_AFTER_RESPAWN)
                 {
                     newState = PlayerLifeState::DEAD;
+                    newPedContext = nullptr;
                 }
                 else if (s_State == PlayerLifeState::DEAD)
                 {
                     newState = PlayerLifeState::RESPAWNING;
+                    newPedContext = nullptr;
+                }
+                else
+                {
+                    newPedContext = nullptr;
                 }
             }
         }
 
-        if (newState != oldState)
+        bool stateChanged = (newState != oldState);
+        if (stateChanged)
         {
-            Logger::Log("[SOMALIA][LIFECYCLE] Transicao: %s -> %s (ped=%p)",
-                GetStateName(oldState), GetStateName(newState), pPed);
-
             s_State = newState;
+            s_CurrentLocalPed = newPedContext;
             s_LastStateChangeTick = GetTickCount64();
+        }
+        else
+        {
+            // Se mantiver ALIVE ou ALIVE_AFTER_RESPAWN, garante sincronia do ped
+            if (s_State == PlayerLifeState::ALIVE || s_State == PlayerLifeState::ALIVE_AFTER_RESPAWN)
+            {
+                s_CurrentLocalPed = newPedContext;
+            }
+            else
+            {
+                s_CurrentLocalPed = nullptr;
+            }
+        }
+
+        ReleaseSRWLockExclusive(&s_StateLock);
+
+        if (stateChanged)
+        {
+            Logger::Log("[SOMALIA][LIFECYCLE] Transition: %s -> %s",
+                GetStateName(oldState), GetStateName(newState));
 
             if (newState == PlayerLifeState::DEAD)
             {
+                Logger::Log("[SOMALIA][LIFECYCLE] LocalPed invalidated");
                 OnPlayerDeath();
+                s_LastLocalPed = nullptr;
             }
             else if (newState == PlayerLifeState::ALIVE_AFTER_RESPAWN ||
                      (oldState == PlayerLifeState::RESPAWNING && newState == PlayerLifeState::ALIVE))
             {
+                s_LastLocalPed = rawPed;
                 OnPlayerRespawn();
             }
         }
-
-        s_LastLocalPed = pPed;
     }
 }

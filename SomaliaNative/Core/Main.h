@@ -1,11 +1,22 @@
 #pragma once
 #include <windows.h>
 
+enum class ShutdownState
+{
+    Running,
+    StopRequested,
+    Stopping,
+    Stopped
+};
+
 namespace Main
 {
-    void RequestUnload();
+    ShutdownState GetShutdownState();
     bool IsShuttingDown();
-    bool IsUnloaded();
+    bool IsStopRequested();
+    void RequestUnload();
+    void BeginShutdown();
     HMODULE GetModuleInstance();
     void UnloadAndExit();
+    bool IsUnloaded();
 }
