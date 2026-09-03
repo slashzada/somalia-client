@@ -1,0 +1,60 @@
+# Build outputs
+SomaliaNative/build/
+build/
+dist/
+*.obj
+*.o
+*.asi
+*.dll
+*.lib
+*.exp
+*.pdb
+*.ilk
+*.log
+*.tlog
+*.lastbuildstate
+*.sdf
+*.opensdf
+*.suo
+*.VC.db
+*.VC.VC.opendb
+
+# Visual Studio / IDE
+.vs/
+.idea/
+.vscode/
+*.sln
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.cbp
+*.depend
+*.layout
+
+# Compiled shaders / temp
+*.tmp
+*.bak
+*.cache
+*.ipch
+ipch/
+
+# Binários
+*.exe
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+
+# OS
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.swp
+*.swo
+*~
+
+# Config local (secrets)
+.env
+*.local.json
