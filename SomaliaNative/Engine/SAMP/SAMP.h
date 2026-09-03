@@ -45,7 +45,16 @@ namespace SAMP
     bool GetRemotePlayer(int index, RemotePlayerData& outData);
     bool GetLocalPlayerPosition(float outPos[3]);
 
+    enum class TeardownStatus
+    {
+        NotHooked = 0,
+        Restored,
+        FailedSafe,
+        FailedUnsafe
+    };
+
     bool EnsureRakHook();
     bool IsRakHooked();
-    void Shutdown();
+    TeardownStatus GetTeardownStatus();
+    TeardownStatus Shutdown();
 }

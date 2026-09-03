@@ -47,6 +47,7 @@ namespace Config
         }
 
         AppendFmt(out, "{\n");
+        AppendFmt(out, "  \"config_version\": %d,\n", CURRENT_CONFIG_VERSION);
         AppendFmt(out, "  \"visuals\": {\n");
         AppendFmt(out, "    \"enableESP\": %s,\n", g_MenuState.visuals.enableESP ? "true" : "false");
         AppendFmt(out, "    \"boxESP\": %s,\n", g_MenuState.visuals.boxESP ? "true" : "false");
@@ -259,51 +260,87 @@ namespace Config
     bool Save(const char* filename)
     {
         std::string s = SaveToString();
-        FILE* f = fopen(filename, "w");
+        std::string tmpPath = std::string(filename) + ".tmp";
+        FILE* f = fopen(tmpPath.c_str(), "w");
         if (!f)
         {
-            Logger::Log("[CONFIG] Erro ao abrir arquivo para salvar: %s", filename);
-            return false;
+            f = fopen(filename, "w");
+            if (!f)
+            {
+                Logger::Log("[CONFIG] Erro ao abrir arquivo para salvar: %s", filename);
+                return false;
+            }
+            fputs(s.c_str(), f);
+            fclose(f);
+            Logger::Log("[CONFIG] Configuracao salva com sucesso (direto) em: %s", filename);
+            return true;
         }
+
         fputs(s.c_str(), f);
         fclose(f);
-        Logger::Log("[CONFIG] Configuracao salva com sucesso em: %s", filename);
+
+        if (!MoveFileExA(tmpPath.c_str(), filename, MOVEFILE_REPLACE_EXISTING | MOVEFILE_COPY_ALLOWED))
+        {
+            DeleteFileA(filename);
+            MoveFileA(tmpPath.c_str(), filename);
+        }
+
+        Logger::Log("[CONFIG] Configuracao salva com sucesso (atomico) em: %s", filename);
         return true;
     }
 
     bool LoadFromString(const char* buffer)
     {
-        if (!buffer) return false;
+        if (!buffer || buffer[0] == '\0')
+        {
+            Logger::Log("[CONFIG] Falha: Buffer de configuracao vazio.");
+            return false;
+        }
 
-// Parse Visuals
+        // Validação estrutural básica de JSON
+        const char* pOpen = strchr(buffer, '{');
+        const char* pClose = strrchr(buffer, '}');
+        if (!pOpen || !pClose || pClose <= pOpen)
+        {
+            Logger::Log("[CONFIG] Falha: Estrutura JSON invalida.");
+            return false;
+        }
+
+        // Parse temporário: g_MenuState só é atualizado se a validação passar
+        MenuState tempState = g_MenuState;
+
+        int configVersion = ParseInt(buffer, "\"config_version\"", 1);
+        (void)configVersion;
+
+        // Parse Visuals
         const char* pVisuals = strstr(buffer, "\"visuals\"");
         if (pVisuals)
         {
-            g_MenuState.visuals.enableESP = ParseBool(pVisuals, "\"enableESP\"", g_MenuState.visuals.enableESP);
-            g_MenuState.visuals.boxESP = ParseBool(pVisuals, "\"boxESP\"", g_MenuState.visuals.boxESP);
-            g_MenuState.visuals.boxType = ParseInt(pVisuals, "\"boxType\"", g_MenuState.visuals.boxType);
-            g_MenuState.visuals.nameESP = ParseBool(pVisuals, "\"nameESP\"", g_MenuState.visuals.nameESP);
-            g_MenuState.visuals.healthESP = ParseBool(pVisuals, "\"healthESP\"", g_MenuState.visuals.healthESP);
-            g_MenuState.visuals.armorESP = ParseBool(pVisuals, "\"armorESP\"", g_MenuState.visuals.armorESP);
-            g_MenuState.visuals.distanceESP = ParseBool(pVisuals, "\"distanceESP\"", g_MenuState.visuals.distanceESP);
-            g_MenuState.visuals.bonesESP = ParseBool(pVisuals, "\"bonesESP\"", g_MenuState.visuals.bonesESP);
-            g_MenuState.visuals.snaplines = ParseBool(pVisuals, "\"snaplines\"", g_MenuState.visuals.snaplines);
-            g_MenuState.visuals.snaplineOrigin = ParseInt(pVisuals, "\"snaplineOrigin\"", g_MenuState.visuals.snaplineOrigin);
-            g_MenuState.visuals.maxDistance = ParseInt(pVisuals, "\"maxDistance\"", g_MenuState.visuals.maxDistance);
-            g_MenuState.visuals.drawFOVCircle = ParseBool(pVisuals, "\"drawFOVCircle\"", g_MenuState.visuals.drawFOVCircle);
-            g_MenuState.visuals.fovCircleRadius = ParseInt(pVisuals, "\"fovCircleRadius\"", g_MenuState.visuals.fovCircleRadius);
-            g_MenuState.visuals.customCrosshair = ParseBool(pVisuals, "\"customCrosshair\"", g_MenuState.visuals.customCrosshair);
-            g_MenuState.visuals.enemyOnly = ParseBool(pVisuals, "\"enemyOnly\"", g_MenuState.visuals.enemyOnly);
-            g_MenuState.visuals.nightMode = ParseBool(pVisuals, "\"nightMode\"", g_MenuState.visuals.nightMode);
-            g_MenuState.visuals.weatherChanger = ParseBool(pVisuals, "\"weatherChanger\"", g_MenuState.visuals.weatherChanger);
-            g_MenuState.visuals.weatherID = ParseInt(pVisuals, "\"weatherID\"", g_MenuState.visuals.weatherID);
-            g_MenuState.visuals.timeChanger = ParseBool(pVisuals, "\"timeChanger\"", g_MenuState.visuals.timeChanger);
-            g_MenuState.visuals.timeHour = ParseInt(pVisuals, "\"timeHour\"", g_MenuState.visuals.timeHour);
-            g_MenuState.visuals.vehicleESP = ParseBool(pVisuals, "\"vehicleESP\"", g_MenuState.visuals.vehicleESP);
-            g_MenuState.visuals.pickupESP = ParseBool(pVisuals, "\"pickupESP\"", g_MenuState.visuals.pickupESP);
-            g_MenuState.visuals.objectESP = ParseBool(pVisuals, "\"objectESP\"", g_MenuState.visuals.objectESP);
-            g_MenuState.visuals.hitmarker = ParseBool(pVisuals, "\"hitmarker\"", g_MenuState.visuals.hitmarker);
-            g_MenuState.visuals.damageInformer = ParseBool(pVisuals, "\"damageInformer\"", g_MenuState.visuals.damageInformer);
+            tempState.visuals.enableESP = ParseBool(pVisuals, "\"enableESP\"", tempState.visuals.enableESP);
+            tempState.visuals.boxESP = ParseBool(pVisuals, "\"boxESP\"", tempState.visuals.boxESP);
+            tempState.visuals.boxType = ParseInt(pVisuals, "\"boxType\"", tempState.visuals.boxType);
+            tempState.visuals.nameESP = ParseBool(pVisuals, "\"nameESP\"", tempState.visuals.nameESP);
+            tempState.visuals.healthESP = ParseBool(pVisuals, "\"healthESP\"", tempState.visuals.healthESP);
+            tempState.visuals.armorESP = ParseBool(pVisuals, "\"armorESP\"", tempState.visuals.armorESP);
+            tempState.visuals.distanceESP = ParseBool(pVisuals, "\"distanceESP\"", tempState.visuals.distanceESP);
+            tempState.visuals.bonesESP = ParseBool(pVisuals, "\"bonesESP\"", tempState.visuals.bonesESP);
+            tempState.visuals.snaplines = ParseBool(pVisuals, "\"snaplines\"", tempState.visuals.snaplines);
+            tempState.visuals.snaplineOrigin = ParseInt(pVisuals, "\"snaplineOrigin\"", tempState.visuals.snaplineOrigin);
+            tempState.visuals.maxDistance = ParseInt(pVisuals, "\"maxDistance\"", tempState.visuals.maxDistance);
+            tempState.visuals.drawFOVCircle = ParseBool(pVisuals, "\"drawFOVCircle\"", tempState.visuals.drawFOVCircle);
+            tempState.visuals.fovCircleRadius = ParseInt(pVisuals, "\"fovCircleRadius\"", tempState.visuals.fovCircleRadius);
+            tempState.visuals.customCrosshair = ParseBool(pVisuals, "\"customCrosshair\"", tempState.visuals.customCrosshair);
+            tempState.visuals.enemyOnly = ParseBool(pVisuals, "\"enemyOnly\"", tempState.visuals.enemyOnly);
+            tempState.visuals.nightMode = ParseBool(pVisuals, "\"nightMode\"", tempState.visuals.nightMode);
+            tempState.visuals.weatherChanger = ParseBool(pVisuals, "\"weatherChanger\"", tempState.visuals.weatherChanger);
+            tempState.visuals.weatherID = ParseInt(pVisuals, "\"weatherID\"", tempState.visuals.weatherID);
+            tempState.visuals.timeChanger = ParseBool(pVisuals, "\"timeChanger\"", tempState.visuals.timeChanger);
+            tempState.visuals.timeHour = ParseInt(pVisuals, "\"timeHour\"", tempState.visuals.timeHour);
+            tempState.visuals.vehicleESP = ParseBool(pVisuals, "\"vehicleESP\"", tempState.visuals.vehicleESP);
+            tempState.visuals.pickupESP = ParseBool(pVisuals, "\"pickupESP\"", tempState.visuals.pickupESP);
+            tempState.visuals.objectESP = ParseBool(pVisuals, "\"objectESP\"", tempState.visuals.objectESP);
+            tempState.visuals.hitmarker = ParseBool(pVisuals, "\"hitmarker\"", tempState.visuals.hitmarker);
+            tempState.visuals.damageInformer = ParseBool(pVisuals, "\"damageInformer\"", tempState.visuals.damageInformer);
         }
 
         // 1. Parse LegitBot
@@ -311,12 +348,12 @@ namespace Config
         if (!pLegit) pLegit = strstr(buffer, "\"aimbot\"");
         if (pLegit)
         {
-            g_MenuState.legitBot.enabled = ParseBool(pLegit, "\"enabled\"", g_MenuState.legitBot.enabled);
-            g_MenuState.legitBot.currentWeaponGroup = ParseInt(pLegit, "\"currentWeaponGroup\"", g_MenuState.legitBot.currentWeaponGroup);
-            g_MenuState.legitBot.silentAim = ParseBool(pLegit, "\"silentAim\"", g_MenuState.legitBot.silentAim);
-            g_MenuState.legitBot.exploitLagPeek = ParseBool(pLegit, "\"exploitLagPeek\"", g_MenuState.legitBot.exploitLagPeek);
-            g_MenuState.legitBot.exploitHideShots = ParseBool(pLegit, "\"exploitHideShots\"", g_MenuState.legitBot.exploitHideShots);
-            g_MenuState.legitBot.exploitDoubleTap = ParseBool(pLegit, "\"exploitDoubleTap\"", g_MenuState.legitBot.exploitDoubleTap);
+            tempState.legitBot.enabled = ParseBool(pLegit, "\"enabled\"", tempState.legitBot.enabled);
+            tempState.legitBot.currentWeaponGroup = ParseInt(pLegit, "\"currentWeaponGroup\"", tempState.legitBot.currentWeaponGroup);
+            tempState.legitBot.silentAim = ParseBool(pLegit, "\"silentAim\"", tempState.legitBot.silentAim);
+            tempState.legitBot.exploitLagPeek = ParseBool(pLegit, "\"exploitLagPeek\"", tempState.legitBot.exploitLagPeek);
+            tempState.legitBot.exploitHideShots = ParseBool(pLegit, "\"exploitHideShots\"", tempState.legitBot.exploitHideShots);
+            tempState.legitBot.exploitDoubleTap = ParseBool(pLegit, "\"exploitDoubleTap\"", tempState.legitBot.exploitDoubleTap);
 
             const char* pWeapons = strstr(pLegit, "\"weapons\"");
             if (pWeapons)
@@ -327,7 +364,7 @@ namespace Config
                     curObj = strchr(curObj, '{');
                     if (!curObj) break;
 
-                    auto& w = g_MenuState.legitBot.weapons[i];
+                    auto& w = tempState.legitBot.weapons[i];
                     w.enabled = ParseBool(curObj, "\"enabled\"", w.enabled);
                     w.fov = ParseFloat(curObj, "\"fov\"", w.fov);
                     w.smooth = ParseFloat(curObj, "\"smooth\"", w.smooth);
@@ -351,8 +388,8 @@ namespace Config
         const char* pRage = strstr(buffer, "\"ragebot\"");
         if (pRage)
         {
-            g_MenuState.rageBot.enabled = ParseBool(pRage, "\"enabled\"", g_MenuState.rageBot.enabled);
-            g_MenuState.rageBot.currentWeaponGroup = ParseInt(pRage, "\"currentWeaponGroup\"", g_MenuState.rageBot.currentWeaponGroup);
+            tempState.rageBot.enabled = ParseBool(pRage, "\"enabled\"", tempState.rageBot.enabled);
+            tempState.rageBot.currentWeaponGroup = ParseInt(pRage, "\"currentWeaponGroup\"", tempState.rageBot.currentWeaponGroup);
 
             const char* pWeapons = strstr(pRage, "\"weapons\"");
             if (pWeapons)
@@ -363,7 +400,7 @@ namespace Config
                     curObj = strchr(curObj, '{');
                     if (!curObj) break;
 
-                    auto& rw = g_MenuState.rageBot.weapons[i];
+                    auto& rw = tempState.rageBot.weapons[i];
                     rw.enabled = ParseBool(curObj, "\"enabled\"", rw.enabled);
                     rw.activationMode = ParseInt(curObj, "\"activationMode\"", rw.activationMode);
                     rw.bone = ParseInt(curObj, "\"bone\"", rw.bone);
@@ -387,8 +424,8 @@ namespace Config
         const char* pSilent = strstr(buffer, "\"silentaim\"");
         if (pSilent)
         {
-            g_MenuState.silentAim.enabled = ParseBool(pSilent, "\"enabled\"", g_MenuState.silentAim.enabled);
-            g_MenuState.silentAim.currentWeaponGroup = ParseInt(pSilent, "\"currentWeaponGroup\"", g_MenuState.silentAim.currentWeaponGroup);
+            tempState.silentAim.enabled = ParseBool(pSilent, "\"enabled\"", tempState.silentAim.enabled);
+            tempState.silentAim.currentWeaponGroup = ParseInt(pSilent, "\"currentWeaponGroup\"", tempState.silentAim.currentWeaponGroup);
 
             const char* pWeapons = strstr(pSilent, "\"weapons\"");
             if (pWeapons)
@@ -399,7 +436,7 @@ namespace Config
                     curObj = strchr(curObj, '{');
                     if (!curObj) break;
 
-                    auto& sw = g_MenuState.silentAim.weapons[i];
+                    auto& sw = tempState.silentAim.weapons[i];
                     sw.enabled = ParseBool(curObj, "\"enabled\"", sw.enabled);
                     sw.activationMode = ParseInt(curObj, "\"activationMode\"", sw.activationMode);
                     sw.bone = ParseInt(curObj, "\"bone\"", sw.bone);
@@ -423,70 +460,98 @@ namespace Config
         const char* pAntiAim = strstr(buffer, "\"antiAim\"");
         if (pAntiAim)
         {
-            g_MenuState.antiAim.enabled = ParseBool(pAntiAim, "\"enabled\"", g_MenuState.antiAim.enabled);
-            g_MenuState.antiAim.pitchMode = ParseInt(pAntiAim, "\"pitchMode\"", g_MenuState.antiAim.pitchMode);
-            g_MenuState.antiAim.yawMode = ParseInt(pAntiAim, "\"yawMode\"", g_MenuState.antiAim.yawMode);
-            g_MenuState.antiAim.spinSpeed = ParseInt(pAntiAim, "\"spinSpeed\"", g_MenuState.antiAim.spinSpeed);
-            g_MenuState.antiAim.fakeLag = ParseBool(pAntiAim, "\"fakeLag\"", g_MenuState.antiAim.fakeLag);
-            g_MenuState.antiAim.fakeLagLimit = ParseInt(pAntiAim, "\"fakeLagLimit\"", g_MenuState.antiAim.fakeLagLimit);
-            g_MenuState.antiAim.desync = ParseBool(pAntiAim, "\"desync\"", g_MenuState.antiAim.desync);
-            g_MenuState.antiAim.invertebred = ParseBool(pAntiAim, "\"invertebred\"", g_MenuState.antiAim.invertebred);
+            tempState.antiAim.enabled = ParseBool(pAntiAim, "\"enabled\"", tempState.antiAim.enabled);
+            tempState.antiAim.pitchMode = ParseInt(pAntiAim, "\"pitchMode\"", tempState.antiAim.pitchMode);
+            tempState.antiAim.yawMode = ParseInt(pAntiAim, "\"yawMode\"", tempState.antiAim.yawMode);
+            tempState.antiAim.spinSpeed = ParseInt(pAntiAim, "\"spinSpeed\"", tempState.antiAim.spinSpeed);
+            tempState.antiAim.fakeLag = ParseBool(pAntiAim, "\"fakeLag\"", tempState.antiAim.fakeLag);
+            tempState.antiAim.fakeLagLimit = ParseInt(pAntiAim, "\"fakeLagLimit\"", tempState.antiAim.fakeLagLimit);
+            tempState.antiAim.desync = ParseBool(pAntiAim, "\"desync\"", tempState.antiAim.desync);
+            tempState.antiAim.invertebred = ParseBool(pAntiAim, "\"invertebred\"", tempState.antiAim.invertebred);
         }
 
         // 4. Parse Player
         const char* pPlayer = strstr(buffer, "\"player\"");
         if (pPlayer)
         {
-            g_MenuState.player.godmode = ParseBool(pPlayer, "\"godmode\"", g_MenuState.player.godmode);
-            g_MenuState.player.infAmmo = ParseBool(pPlayer, "\"infAmmo\"", g_MenuState.player.infAmmo);
-            g_MenuState.player.infStamina = ParseBool(pPlayer, "\"infStamina\"", g_MenuState.player.infStamina);
-            g_MenuState.player.fastRun = ParseBool(pPlayer, "\"fastRun\"", g_MenuState.player.fastRun);
-            g_MenuState.player.megaJump = ParseBool(pPlayer, "\"megaJump\"", g_MenuState.player.megaJump);
-            g_MenuState.player.antiStun = ParseBool(pPlayer, "\"antiStun\"", g_MenuState.player.antiStun);
-            g_MenuState.player.fastReload = ParseBool(pPlayer, "\"fastReload\"", g_MenuState.player.fastReload);
-            g_MenuState.player.autoCBug = ParseBool(pPlayer, "\"autoCBug\"", g_MenuState.player.autoCBug);
-            g_MenuState.player.noSpread = ParseBool(pPlayer, "\"noSpread\"", g_MenuState.player.noSpread);
+            tempState.player.godmode = ParseBool(pPlayer, "\"godmode\"", tempState.player.godmode);
+            tempState.player.infAmmo = ParseBool(pPlayer, "\"infAmmo\"", tempState.player.infAmmo);
+            tempState.player.infStamina = ParseBool(pPlayer, "\"infStamina\"", tempState.player.infStamina);
+            tempState.player.fastRun = ParseBool(pPlayer, "\"fastRun\"", tempState.player.fastRun);
+            tempState.player.megaJump = ParseBool(pPlayer, "\"megaJump\"", tempState.player.megaJump);
+            tempState.player.antiStun = ParseBool(pPlayer, "\"antiStun\"", tempState.player.antiStun);
+            tempState.player.fastReload = ParseBool(pPlayer, "\"fastReload\"", tempState.player.fastReload);
+            tempState.player.autoCBug = ParseBool(pPlayer, "\"autoCBug\"", tempState.player.autoCBug);
+            tempState.player.noSpread = ParseBool(pPlayer, "\"noSpread\"", tempState.player.noSpread);
         }
 
         // 5. Parse Vehicle
         const char* pVehicle = strstr(buffer, "\"vehicle\"");
         if (pVehicle)
         {
-            g_MenuState.vehicle.engineAlwaysOn = ParseBool(pVehicle, "\"engineAlwaysOn\"", g_MenuState.vehicle.engineAlwaysOn);
-            g_MenuState.vehicle.carGodmode = ParseBool(pVehicle, "\"carGodmode\"", g_MenuState.vehicle.carGodmode);
-            g_MenuState.vehicle.speedMultiplier = ParseInt(pVehicle, "\"speedMultiplier\"", g_MenuState.vehicle.speedMultiplier);
-            g_MenuState.vehicle.autoFlip = ParseBool(pVehicle, "\"autoFlip\"", g_MenuState.vehicle.autoFlip);
-            g_MenuState.vehicle.instantRepair = ParseBool(pVehicle, "\"instantRepair\"", g_MenuState.vehicle.instantRepair);
-            g_MenuState.vehicle.noBikeFall = ParseBool(pVehicle, "\"noBikeFall\"", g_MenuState.vehicle.noBikeFall);
-            g_MenuState.vehicle.flyCar = ParseBool(pVehicle, "\"flyCar\"", g_MenuState.vehicle.flyCar);
+            tempState.vehicle.engineAlwaysOn = ParseBool(pVehicle, "\"engineAlwaysOn\"", tempState.vehicle.engineAlwaysOn);
+            tempState.vehicle.carGodmode = ParseBool(pVehicle, "\"carGodmode\"", tempState.vehicle.carGodmode);
+            tempState.vehicle.speedMultiplier = ParseInt(pVehicle, "\"speedMultiplier\"", tempState.vehicle.speedMultiplier);
+            tempState.vehicle.autoFlip = ParseBool(pVehicle, "\"autoFlip\"", tempState.vehicle.autoFlip);
+            tempState.vehicle.instantRepair = ParseBool(pVehicle, "\"instantRepair\"", tempState.vehicle.instantRepair);
+            tempState.vehicle.noBikeFall = ParseBool(pVehicle, "\"noBikeFall\"", tempState.vehicle.noBikeFall);
+            tempState.vehicle.flyCar = ParseBool(pVehicle, "\"flyCar\"", tempState.vehicle.flyCar);
         }
 
         // 6. Parse Slide
         const char* pSlide = strstr(buffer, "\"slide\"");
         if (pSlide)
         {
-            g_MenuState.slide.enabled = ParseBool(pSlide, "\"enabled\"", g_MenuState.slide.enabled);
-            g_MenuState.slide.cSlideActive = ParseBool(pSlide, "\"cSlideActive\"", g_MenuState.slide.cSlideActive);
-            g_MenuState.slide.autoSlideActive = ParseBool(pSlide, "\"autoSlideActive\"", g_MenuState.slide.autoSlideActive);
-            g_MenuState.slide.durationC = ParseInt(pSlide, "\"durationC\"", g_MenuState.slide.durationC);
-            g_MenuState.slide.delayTroca = ParseInt(pSlide, "\"delayTroca\"", g_MenuState.slide.delayTroca);
-            g_MenuState.slide.slideBoost = ParseFloat(pSlide, "\"slideBoost\"", g_MenuState.slide.slideBoost);
-            g_MenuState.slide.marginDeagle = ParseInt(pSlide, "\"marginDeagle\"", g_MenuState.slide.marginDeagle);
-            g_MenuState.slide.marginShotgun = ParseInt(pSlide, "\"marginShotgun\"", g_MenuState.slide.marginShotgun);
-            g_MenuState.slide.marginSniper = ParseInt(pSlide, "\"marginSniper\"", g_MenuState.slide.marginSniper);
-            g_MenuState.slide.marginM4 = ParseInt(pSlide, "\"marginM4\"", g_MenuState.slide.marginM4);
-            g_MenuState.slide.marginAK47 = ParseInt(pSlide, "\"marginAK47\"", g_MenuState.slide.marginAK47);
+            tempState.slide.enabled = ParseBool(pSlide, "\"enabled\"", tempState.slide.enabled);
+            tempState.slide.cSlideActive = ParseBool(pSlide, "\"cSlideActive\"", tempState.slide.cSlideActive);
+            tempState.slide.autoSlideActive = ParseBool(pSlide, "\"autoSlideActive\"", tempState.slide.autoSlideActive);
+            tempState.slide.durationC = ParseInt(pSlide, "\"durationC\"", tempState.slide.durationC);
+            tempState.slide.delayTroca = ParseInt(pSlide, "\"delayTroca\"", tempState.slide.delayTroca);
+            tempState.slide.slideBoost = ParseFloat(pSlide, "\"slideBoost\"", tempState.slide.slideBoost);
+            tempState.slide.marginDeagle = ParseInt(pSlide, "\"marginDeagle\"", tempState.slide.marginDeagle);
+            tempState.slide.marginShotgun = ParseInt(pSlide, "\"marginShotgun\"", tempState.slide.marginShotgun);
+            tempState.slide.marginSniper = ParseInt(pSlide, "\"marginSniper\"", tempState.slide.marginSniper);
+            tempState.slide.marginM4 = ParseInt(pSlide, "\"marginM4\"", tempState.slide.marginM4);
+            tempState.slide.marginAK47 = ParseInt(pSlide, "\"marginAK47\"", tempState.slide.marginAK47);
         }
 
         // 7. Parse Misc
         const char* pMisc = strstr(buffer, "\"misc\"");
         if (pMisc)
         {
-            g_MenuState.misc.particles = ParseBool(pMisc, "\"particles\"", g_MenuState.misc.particles);
-            g_MenuState.misc.watermark = ParseBool(pMisc, "\"watermark\"", g_MenuState.misc.watermark);
+            tempState.misc.particles = ParseBool(pMisc, "\"particles\"", tempState.misc.particles);
+            tempState.misc.watermark = ParseBool(pMisc, "\"watermark\"", tempState.misc.watermark);
         }
 
-                return true;
+        // Validação e Clamping defensivo
+        if (tempState.visuals.maxDistance < 10) tempState.visuals.maxDistance = 10;
+        if (tempState.visuals.maxDistance > 1000) tempState.visuals.maxDistance = 1000;
+        if (tempState.visuals.fovCircleRadius < 5) tempState.visuals.fovCircleRadius = 5;
+        if (tempState.visuals.fovCircleRadius > 500) tempState.visuals.fovCircleRadius = 500;
+        if (tempState.visuals.timeHour < 0) tempState.visuals.timeHour = 0;
+        if (tempState.visuals.timeHour > 23) tempState.visuals.timeHour = 23;
+
+        for (int i = 0; i < 4; i++)
+        {
+            if (tempState.legitBot.weapons[i].fov < 1.0f) tempState.legitBot.weapons[i].fov = 1.0f;
+            if (tempState.legitBot.weapons[i].fov > 100.0f) tempState.legitBot.weapons[i].fov = 100.0f;
+            if (tempState.legitBot.weapons[i].smooth < 1.0f) tempState.legitBot.weapons[i].smooth = 1.0f;
+            if (tempState.legitBot.weapons[i].smooth > 50.0f) tempState.legitBot.weapons[i].smooth = 50.0f;
+            if (tempState.legitBot.weapons[i].bone < 0 || tempState.legitBot.weapons[i].bone > 3) tempState.legitBot.weapons[i].bone = 0;
+            if (tempState.legitBot.weapons[i].activationMode < 0 || tempState.legitBot.weapons[i].activationMode > 3) tempState.legitBot.weapons[i].activationMode = 1;
+
+            if (tempState.rageBot.weapons[i].fov < 1.0f) tempState.rageBot.weapons[i].fov = 1.0f;
+            if (tempState.rageBot.weapons[i].fov > 100.0f) tempState.rageBot.weapons[i].fov = 100.0f;
+            if (tempState.rageBot.weapons[i].aggressiveness < 0.0f) tempState.rageBot.weapons[i].aggressiveness = 0.0f;
+            if (tempState.rageBot.weapons[i].aggressiveness > 100.0f) tempState.rageBot.weapons[i].aggressiveness = 100.0f;
+
+            if (tempState.silentAim.weapons[i].hitChance < 0) tempState.silentAim.weapons[i].hitChance = 0;
+            if (tempState.silentAim.weapons[i].hitChance > 100) tempState.silentAim.weapons[i].hitChance = 100;
+        }
+
+        // Aplicação atômica do estado validado
+        g_MenuState = tempState;
+        return true;
     }
 
     bool Load(const char* filename)

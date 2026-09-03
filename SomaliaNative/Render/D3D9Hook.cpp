@@ -28,6 +28,8 @@ namespace D3D9Hook
     static tReset   s_oReset   = nullptr;
     static void**   s_pVTable  = nullptr;
     static bool     s_bImGuiInitialized = false;
+    static std::atomic<bool> s_HooksRestored(false);
+    static std::atomic<bool> s_UIDestroyed(false);
 
     static HRESULT __stdcall hkReset(IDirect3DDevice9* pDevice, D3DPRESENT_PARAMETERS* pPresentationParameters)
     {
@@ -68,6 +70,12 @@ namespace D3D9Hook
             {
                 Main::BeginShutdown();
             }
+            return s_oPresent ? s_oPresent(pDevice, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion) : D3D_OK;
+        }
+
+        // Se o dispositivo estiver perdido, apenas repassa sem desenhar ImGui
+        if (pDevice->TestCooperativeLevel() != D3D_OK)
+        {
             return s_oPresent ? s_oPresent(pDevice, pSourceRect, pDestRect, hDestWindowOverride, pDirtyRegion) : D3D_OK;
         }
 
@@ -135,6 +143,9 @@ namespace D3D9Hook
 
     bool Initialize()
     {
+        s_HooksRestored.store(false);
+        s_UIDestroyed.store(false);
+
         IDirect3DDevice9* pDevice = GTA::GetD3DDevice();
         if (!pDevice)
         {
@@ -169,7 +180,6 @@ namespace D3D9Hook
 
     void RestoreHooks()
     {
-        static std::atomic<bool> s_HooksRestored(false);
         if (s_HooksRestored.exchange(true))
             return;
 
@@ -199,7 +209,6 @@ namespace D3D9Hook
 
     void DestroyUI()
     {
-        static std::atomic<bool> s_UIDestroyed(false);
         if (s_UIDestroyed.exchange(true))
             return;
 

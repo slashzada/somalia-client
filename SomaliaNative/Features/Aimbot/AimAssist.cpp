@@ -117,7 +117,10 @@ namespace AimAssist
             s_State.isActive = false;
             s_State.outputX = 0;
             s_State.outputY = 0;
+            s_State.accumulatedX = 0.0f;
+            s_State.accumulatedY = 0.0f;
             s_State.applied = false;
+            s_DoubleTapFired = false;
             return;
         }
 

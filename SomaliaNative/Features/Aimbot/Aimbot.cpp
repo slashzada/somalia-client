@@ -109,6 +109,7 @@ namespace Aimbot
         s_CurrentTarget = {};
         s_CurrentTarget.valid = false;
         s_LastLoggedTargetId = -1;
+        AimAssist::Reset();
     }
 
     void Update()

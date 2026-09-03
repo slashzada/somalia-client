@@ -195,8 +195,13 @@ static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam)
     Logger::Log("[SOMALIA][UNLOAD] RESTORING HOOKS");
     D3D9Hook::RestoreHooks();
     InputManager::RestoreWndProc();
-    SAMP::Shutdown();
-    Logger::Log("[SOMALIA][UNLOAD] HOOKS RESTORED");
+    SAMP::TeardownStatus sampStatus = SAMP::Shutdown();
+    if (sampStatus == SAMP::TeardownStatus::FailedUnsafe)
+    {
+        Logger::Log("[SOMALIA][UNLOAD] ERRO CRITICO: SAMP::Shutdown retornou FAILED_UNSAFE! Unload abortado por seguranca.");
+        return 0;
+    }
+    Logger::Log("[SOMALIA][UNLOAD] HOOKS RESTORED (SAMP teardown status=%d)", static_cast<int>(sampStatus));
 
     // Drenagem final para garantir que nenhum callback in-flight no momento da restauração fique pendente
     if (!Main::WaitForCallbacks(1000))

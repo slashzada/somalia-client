@@ -52,56 +52,95 @@ namespace SAMP
 
         __try
         {
-            unsigned char* pR1 = reinterpret_cast<unsigned char*>(sampBase + 0x9BD30);
-            unsigned char* pR3 = reinterpret_cast<unsigned char*>(sampBase + 0x9FFE0);
-            unsigned char* pR4 = reinterpret_cast<unsigned char*>(sampBase + 0xA0750);
-            unsigned char* pR5 = reinterpret_cast<unsigned char*>(sampBase + 0xA0890);
-            unsigned char* pDL = reinterpret_cast<unsigned char*>(sampBase + 0xA0530);
+            PIMAGE_DOS_HEADER pDos = reinterpret_cast<PIMAGE_DOS_HEADER>(sampBase);
+            if (!pDos || IsBadReadPtr(pDos, sizeof(IMAGE_DOS_HEADER)) || pDos->e_magic != IMAGE_DOS_SIGNATURE)
+                return;
 
-            if (pR1 && pR1[0] == 0x55 && pR1[1] == 0x8B && pR1[2] == 0xEC)
+            PIMAGE_NT_HEADERS pNt = reinterpret_cast<PIMAGE_NT_HEADERS>(sampBase + pDos->e_lfanew);
+            if (!pNt || IsBadReadPtr(pNt, sizeof(IMAGE_NT_HEADERS)) || pNt->Signature != IMAGE_NT_SIGNATURE)
+                return;
+
+            DWORD entryPoint = pNt->OptionalHeader.AddressOfEntryPoint;
+            DWORD timeDateStamp = pNt->FileHeader.TimeDateStamp;
+
+            // Verificação determinística por campos oficiais do PE Header
+            // 0.3.7-R1: EP 0x31DF13, TimeDateStamp 0x554D0DE8
+            if (entryPoint == 0x31DF13 || timeDateStamp == 0x554D0DE8)
             {
                 s_Version = Version::R1;
                 s_Config = { "0.3.7-R1", 0x21A0F8, 0x21A10C, 0x9BD30, 0x9BC10, 0x3CD, 0x18, 0x2E, 0xFDE, 0x4 };
             }
-            else if (pR3 && pR3[0] == 0x55 && pR3[1] == 0x8B && pR3[2] == 0xEC)
+            // 0.3.7-R2: EP 0x3195DD, TimeDateStamp 0x559D040A
+            else if (entryPoint == 0x3195DD || timeDateStamp == 0x559D040A)
+            {
+                s_Version = Version::R2;
+                s_Config = { "0.3.7-R2", 0x21A0F8, 0x21A10C, 0x9BD30, 0x9BC10, 0x3CD, 0x18, 0x2E, 0xFDE, 0x4 };
+            }
+            // 0.3.7-R3: EP 0xCC4D0, TimeDateStamp 0x5C0B4243 / 0x5C0B3E7A
+            else if (entryPoint == 0xCC4D0 || timeDateStamp == 0x5C0B4243 || timeDateStamp == 0x5C0B3E7A)
             {
                 s_Version = Version::R3;
                 s_Config = { "0.3.7-R3", 0x26E8DC, 0x26E8F4, 0x9FFE0, 0x9FEC0, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C };
             }
-            else if (pR4 && pR4[0] == 0x55 && pR4[1] == 0x8B && pR4[2] == 0xEC)
+            // 0.3.7-R4: EP 0xCBCB0, TimeDateStamp 0x5DE3DCB8
+            else if (entryPoint == 0xCBCB0 || timeDateStamp == 0x5DE3DCB8)
             {
                 s_Version = Version::R4;
                 s_Config = { "0.3.7-R4", 0x26EA04, 0x26EA0C, 0xA0750, 0xA0630, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C };
             }
-            else if (pR5 && pR5[0] == 0x55 && pR5[1] == 0x8B && pR5[2] == 0xEC)
+            // 0.3.7-R5: EP 0xCBC90, TimeDateStamp 0x6009E839
+            else if (entryPoint == 0xCBC90 || timeDateStamp == 0x6009E839)
             {
                 s_Version = Version::R5;
                 s_Config = { "0.3.7-R5", 0x26EB94, 0x26EBAC, 0xA0890, 0xA0770, 0x3DE, 0x4, 0x4, 0xFB4, 0x2F1C };
             }
-            else if (pDL && pDL[0] == 0x55 && pDL[1] == 0x8B && pDL[2] == 0xEC)
+            // 0.3.DL-1: EP 0xCB180, TimeDateStamp 0x5A707993
+            else if (entryPoint == 0xCB180 || timeDateStamp == 0x5A707993)
             {
                 s_Version = Version::DL;
                 s_Config = { "0.3.DL-1", 0x2ACA14, 0x2ACA24, 0xA0530, 0xA0410, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C };
             }
             else
             {
-                // Fallback dinâmico por validação de ponteiros conhecidos
-                uintptr_t pSAMP_R3 = *reinterpret_cast<uintptr_t*>(sampBase + 0x26E8DC);
-                uintptr_t pSAMP_R1 = *reinterpret_cast<uintptr_t*>(sampBase + 0x21A0F8);
-                if (pSAMP_R3 > 0x10000 && !IsBadReadPtr(reinterpret_cast<void*>(pSAMP_R3), 4))
-                {
-                    s_Version = Version::R3;
-                    s_Config = { "0.3.7-R3 (Probed)", 0x26E8DC, 0x26E8F4, 0x9FFE0, 0x9FEC0, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C };
-                }
-                else if (pSAMP_R1 > 0x10000 && !IsBadReadPtr(reinterpret_cast<void*>(pSAMP_R1), 4))
+                // Verificação secundária por byte pattern da função ToggleCursor com validação estrita (5 bytes)
+                unsigned char* pR1 = reinterpret_cast<unsigned char*>(sampBase + 0x9BD30);
+                unsigned char* pR3 = reinterpret_cast<unsigned char*>(sampBase + 0x9FFE0);
+                unsigned char* pR4 = reinterpret_cast<unsigned char*>(sampBase + 0xA0750);
+                unsigned char* pR5 = reinterpret_cast<unsigned char*>(sampBase + 0xA0890);
+                unsigned char* pDL = reinterpret_cast<unsigned char*>(sampBase + 0xA0530);
+
+                if (pR1 && !IsBadReadPtr(pR1, 5) && pR1[0] == 0x55 && pR1[1] == 0x8B && pR1[2] == 0xEC && pR1[3] == 0x83 && pR1[4] == 0xEC)
                 {
                     s_Version = Version::R1;
-                    s_Config = { "0.3.7-R1 (Probed)", 0x21A0F8, 0x21A10C, 0x9BD30, 0x9BC10, 0x3CD, 0x18, 0x2E, 0xFDE, 0x4 };
+                    s_Config = { "0.3.7-R1 (Signature)", 0x21A0F8, 0x21A10C, 0x9BD30, 0x9BC10, 0x3CD, 0x18, 0x2E, 0xFDE, 0x4 };
+                }
+                else if (pR3 && !IsBadReadPtr(pR3, 5) && pR3[0] == 0x55 && pR3[1] == 0x8B && pR3[2] == 0xEC && pR3[3] == 0x83 && pR3[4] == 0xEC)
+                {
+                    s_Version = Version::R3;
+                    s_Config = { "0.3.7-R3 (Signature)", 0x26E8DC, 0x26E8F4, 0x9FFE0, 0x9FEC0, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C };
+                }
+                else if (pR4 && !IsBadReadPtr(pR4, 5) && pR4[0] == 0x55 && pR4[1] == 0x8B && pR4[2] == 0xEC && pR4[3] == 0x83 && pR4[4] == 0xEC)
+                {
+                    s_Version = Version::R4;
+                    s_Config = { "0.3.7-R4 (Signature)", 0x26EA04, 0x26EA0C, 0xA0750, 0xA0630, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C };
+                }
+                else if (pR5 && !IsBadReadPtr(pR5, 5) && pR5[0] == 0x55 && pR5[1] == 0x8B && pR5[2] == 0xEC && pR5[3] == 0x83 && pR5[4] == 0xEC)
+                {
+                    s_Version = Version::R5;
+                    s_Config = { "0.3.7-R5 (Signature)", 0x26EB94, 0x26EBAC, 0xA0890, 0xA0770, 0x3DE, 0x4, 0x4, 0xFB4, 0x2F1C };
+                }
+                else if (pDL && !IsBadReadPtr(pDL, 5) && pDL[0] == 0x55 && pDL[1] == 0x8B && pDL[2] == 0xEC && pDL[3] == 0x83 && pDL[4] == 0xEC)
+                {
+                    s_Version = Version::DL;
+                    s_Config = { "0.3.DL-1 (Signature)", 0x2ACA14, 0x2ACA24, 0xA0530, 0xA0410, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C };
                 }
                 else
                 {
-                    s_Version = Version::R3;
-                    s_Config = { "0.3.7-R3 (Default)", 0x26E8DC, 0x26E8F4, 0x9FFE0, 0x9FEC0, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C };
+                    // Versão não comprovada: NUNCA assumir R3 cegamente!
+                    s_Version = Version::Unknown;
+                    s_Config = { "Unknown / Unsupported", 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+                    Logger::Log("[SAMP] AVISO CRITICO: Versao do SA-MP nao reconhecida (EP=0x%X, TimeStamp=0x%X). Acesso a estruturas do SAMP bloqueado.",
+                        entryPoint, timeDateStamp);
                 }
             }
 
@@ -112,9 +151,10 @@ namespace SAMP
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
         {
-            s_Version = Version::R3;
-            s_Config = { "0.3.7-R3 (Fallback)", 0x26E8DC, 0x26E8F4, 0x9FFE0, 0x9FEC0, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C };
+            s_Version = Version::Unknown;
+            s_Config = { "Unknown / Exception", 0, 0, 0, 0, 0, 0, 0, 0, 0 };
             s_Initialized = true;
+            Logger::Log("[SAMP] ERRO: Excecao durante deteccao de versao do SA-MP.");
         }
     }
 
@@ -133,6 +173,9 @@ namespace SAMP
     uintptr_t GetSAMPInfo()
     {
         DetectVersion();
+        if (s_Version == Version::Unknown || s_Config.infoOffset == 0)
+            return 0;
+
         uintptr_t sampBase = GetBaseAddress();
         if (!sampBase) return 0;
 
@@ -193,28 +236,67 @@ namespace SAMP
 
     uintptr_t GetLocalPlayer()
     {
+        if (s_Version == Version::Unknown) return 0;
         uintptr_t pPlayerPool = GetPlayerPool();
         if (!pPlayerPool) return 0;
 
+        void* rawLocalPed = RuntimeState::GetLocalPed();
+        if (!rawLocalPed)
+        {
+            void** ppGta = reinterpret_cast<void**>(0x00B7CD98);
+            if (ppGta && !IsBadReadPtr(ppGta, sizeof(void*)))
+                rawLocalPed = *ppGta;
+        }
+
         __try
         {
-            // Candidatos conhecidos por versão:
-            // R3 / R4 / R5 / DL: 0x2F38, 0x2F3C, 0x2F1C, 0x2F20
-            // R1: 0x20, 0x24, 0x18, 0x22
-            static const uintptr_t candidateOffsets[] = {
-                0x2F38, 0x2F3C, 0x2F1C, 0x2F20, 0x2F14, 0x20, 0x24, 0x18, 0x22, 0x2E
-            };
+            // Offset primário conforme versão
+            uintptr_t primaryOff = 0;
+            if (s_Version == Version::R1 || s_Version == Version::R2)
+                primaryOff = 0x22;
+            else if (s_Version == Version::R3 || s_Version == Version::R4 || s_Version == Version::R5 || s_Version == Version::DL)
+                primaryOff = 0x2F1C;
 
-            for (uintptr_t off : candidateOffsets)
+            // 1. Testa primeiro o offset primário
+            if (primaryOff != 0 && !IsBadReadPtr(reinterpret_cast<void*>(pPlayerPool + primaryOff), sizeof(void*)))
             {
-                if (IsBadReadPtr(reinterpret_cast<void*>(pPlayerPool + off), sizeof(void*)))
-                    continue;
-
-                uintptr_t pCandidate = *reinterpret_cast<uintptr_t*>(pPlayerPool + off);
-                if (pCandidate > 0x10000 && !IsBadReadPtr(reinterpret_cast<void*>(pCandidate), 100))
+                uintptr_t pCandidate = *reinterpret_cast<uintptr_t*>(pPlayerPool + primaryOff);
+                if (pCandidate > 0x10000 && !IsBadReadPtr(reinterpret_cast<void*>(pCandidate), 64))
                 {
-                    // Valida se possui estrutura de dados consistente (m_pPed ou OnfootData)
-                    return pCandidate;
+                    if (rawLocalPed)
+                    {
+                        void* pInternalPed = *reinterpret_cast<void**>(pCandidate);
+                        if (pInternalPed == rawLocalPed)
+                            return pCandidate;
+                    }
+                    else
+                    {
+                        return pCandidate;
+                    }
+                }
+            }
+
+            // 2. Probing secundário validando estritamente com o ped nativo
+            if (rawLocalPed)
+            {
+                static const uintptr_t candidateOffsets[] = {
+                    0x2F1C, 0x22, 0x2F38, 0x2F3C, 0x2F20, 0x20, 0x24, 0x18, 0x2E
+                };
+
+                for (uintptr_t off : candidateOffsets)
+                {
+                    if (IsBadReadPtr(reinterpret_cast<void*>(pPlayerPool + off), sizeof(void*)))
+                        continue;
+
+                    uintptr_t pCandidate = *reinterpret_cast<uintptr_t*>(pPlayerPool + off);
+                    if (pCandidate > 0x10000 && !IsBadReadPtr(reinterpret_cast<void*>(pCandidate), 64))
+                    {
+                        void* pInternalPed = *reinterpret_cast<void**>(pCandidate);
+                        if (pInternalPed == rawLocalPed)
+                        {
+                            return pCandidate;
+                        }
+                    }
                 }
             }
         }
@@ -1020,12 +1102,20 @@ namespace SAMP
         return s_RakHookInstalled;
     }
 
-    void Shutdown()
-    {
-        static std::atomic<bool> s_AlreadyShutdown(false);
-        if (s_AlreadyShutdown.exchange(true)) return;
+    static TeardownStatus s_TeardownStatus = TeardownStatus::NotHooked;
 
-        if (!s_RakHookInstalled) return;
+    TeardownStatus GetTeardownStatus()
+    {
+        return s_TeardownStatus;
+    }
+
+    TeardownStatus Shutdown()
+    {
+        if (!s_RakHookInstalled)
+        {
+            s_TeardownStatus = TeardownStatus::NotHooked;
+            return s_TeardownStatus;
+        }
 
         bool restored = false;
 
@@ -1099,17 +1189,29 @@ namespace SAMP
             }
         }
 
-        // 3. Validação de segurança: marca desinstalado com sucesso mantendo ponteiros originais defensivos
+        // 3. Validação de segurança e definição de estado determinístico
         if (restored)
         {
             s_HookedVTable = nullptr;
             s_HookedOffset = 0;
             s_RakHookInstalled = false;
-            Logger::Log("[SAMP][DIAG][UNHOOK] RakClient VMT hook completamente removido e estado limpo.");
+            s_TeardownStatus = TeardownStatus::Restored;
+            Logger::Log("[SAMP][DIAG][UNHOOK] RakClient VMT hook completamente removido (RESTORED).");
         }
         else
         {
-            Logger::Log("[SAMP][DIAG][AVISO] Falha ao restaurar VTable do RakClient no Shutdown. Ponteiros originais preservados.");
+            if (s_OriginalSendData && s_OriginalSendBitStream)
+            {
+                s_TeardownStatus = TeardownStatus::FailedSafe;
+                Logger::Log("[SAMP][DIAG][AVISO] Falha ao restaurar VTable do RakClient no Shutdown (FAILED_SAFE). Ponteiros originais preservados.");
+            }
+            else
+            {
+                s_TeardownStatus = TeardownStatus::FailedUnsafe;
+                Logger::Log("[SAMP][DIAG][ERRO] Falha ao restaurar VTable do RakClient no Shutdown (FAILED_UNSAFE). Ponteiros corrompidos ou nulos.");
+            }
         }
+
+        return s_TeardownStatus;
     }
 }

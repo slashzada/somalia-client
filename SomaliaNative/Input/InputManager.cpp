@@ -149,11 +149,14 @@ namespace InputManager
         return DefWindowProcA(hWnd, uMsg, wParam, lParam);
     }
 
+    static std::atomic<bool> s_WndProcRestored(false);
+
     void Initialize(HWND hWnd)
     {
         if (!hWnd || !IsWindow(hWnd))
             return;
 
+        s_WndProcRestored.store(false);
         s_hWnd = hWnd;
         s_oWndProc = (WNDPROC)SetWindowLongPtrA(s_hWnd, GWLP_WNDPROC, (LONG_PTR)hkWndProc);
         Logger::Log("WndProc subclassed com sucesso na janela 0x%p", (void*)s_hWnd);
@@ -161,7 +164,6 @@ namespace InputManager
 
     void RestoreWndProc()
     {
-        static std::atomic<bool> s_WndProcRestored(false);
         if (s_WndProcRestored.exchange(true))
             return;
 

@@ -280,12 +280,52 @@ struct MenuState
     bool& miscPreferBodyAim = legitBot.preferBodyAim;
     bool& miscIgnoreLimbs = legitBot.ignoreLimbs;
     int& autoSnipersType = legitBot.autoSnipersType;
+
+    MenuState() = default;
+
+    MenuState(const MenuState& other)
+        : menuOpen(other.menuOpen)
+        , currentTab(other.currentTab)
+        , currentAimbotPage(other.currentAimbotPage)
+        , visuals(other.visuals)
+        , legitBot(other.legitBot)
+        , rageBot(other.rageBot)
+        , silentAim(other.silentAim)
+        , antiAim(other.antiAim)
+        , player(other.player)
+        , vehicle(other.vehicle)
+        , slide(other.slide)
+        , misc(other.misc)
+    {
+    }
+
+    MenuState& operator=(const MenuState& other)
+    {
+        if (this != &other)
+        {
+            menuOpen = other.menuOpen;
+            currentTab = other.currentTab;
+            currentAimbotPage = other.currentAimbotPage;
+            visuals = other.visuals;
+            legitBot = other.legitBot;
+            rageBot = other.rageBot;
+            silentAim = other.silentAim;
+            antiAim = other.antiAim;
+            player = other.player;
+            vehicle = other.vehicle;
+            slide = other.slide;
+            misc = other.misc;
+        }
+        return *this;
+    }
 };
 
 extern MenuState g_MenuState;
 
 namespace Config
 {
+    constexpr int CURRENT_CONFIG_VERSION = 1;
+
     bool Save(const char* filename = "somalia_config.json");
     bool Load(const char* filename = "somalia_config.json");
     std::string SaveToString();

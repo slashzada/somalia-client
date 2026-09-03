@@ -208,8 +208,20 @@ namespace RuntimeState
 
         if (!rawPed)
         {
-            if (s_State == PlayerLifeState::DEAD || s_State == PlayerLifeState::RESPAWNING)
+            if (s_State == PlayerLifeState::UNKNOWN)
             {
+                // Jogo ainda inicializando / carregando interior ou spawn: permanece UNKNOWN
+                newState = PlayerLifeState::UNKNOWN;
+                newPedContext = nullptr;
+            }
+            else if (s_State == PlayerLifeState::DEAD || s_State == PlayerLifeState::RESPAWNING)
+            {
+                newState = PlayerLifeState::RESPAWNING;
+                newPedContext = nullptr;
+            }
+            else if (s_State == PlayerLifeState::ALIVE || s_State == PlayerLifeState::ALIVE_AFTER_RESPAWN)
+            {
+                // Ped removido pelo motor (morte instantânea ou transição de interior/spawn)
                 newState = PlayerLifeState::RESPAWNING;
                 newPedContext = nullptr;
             }
@@ -297,7 +309,8 @@ namespace RuntimeState
             Logger::Log("[SOMALIA][LIFECYCLE] Transition: %s -> %s",
                 GetStateName(oldState), GetStateName(newState));
 
-            if (newState == PlayerLifeState::DEAD)
+            if (newState == PlayerLifeState::DEAD ||
+                ((oldState == PlayerLifeState::ALIVE || oldState == PlayerLifeState::ALIVE_AFTER_RESPAWN) && newState == PlayerLifeState::RESPAWNING))
             {
                 Logger::Log("[SOMALIA][LIFECYCLE] LocalPed invalidated");
                 OnPlayerDeath();
