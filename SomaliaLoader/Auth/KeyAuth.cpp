@@ -3,6 +3,7 @@
 #include <wininet.h>
 #include <sstream>
 #include <ctime>
+#include <cstdlib>
 
 #pragma comment(lib, "wininet.lib")
 
@@ -107,12 +108,14 @@ std::string KeyAuthClient::ParseJsonField(const std::string& json, const std::st
 
 bool KeyAuthClient::Init()
 {
-    // Se credenciais nao configuradas, ativa modo de desenvolvimento imediato
+    const char* allowDev = std::getenv("SOMALIA_ALLOW_DEV_AUTH");
+    const bool devAuthAllowed = allowDev && std::string(allowDev) == "1";
+
     if (m_Name.empty() || m_Name == "YOUR_APP_NAME" || m_Secret.empty() || m_Secret == "YOUR_SECRET")
     {
-        m_Initialized = true;
-        m_SessionId = "dev_session";
-        return true;
+        m_Initialized = false;
+        m_SessionId = "";
+        return false;
     }
 
     std::string body = "type=init&name=" + m_Name + "&ownerid=" + m_OwnerId + "&secret=" + m_Secret + "&ver=" + m_Version;
@@ -125,10 +128,16 @@ bool KeyAuthClient::Init()
         return true;
     }
 
-    // Se falhar a conexao com a API mas for dev, permite continuar
-    m_Initialized = true;
-    m_SessionId = "fallback_session";
-    return true;
+    if (devAuthAllowed)
+    {
+        m_Initialized = true;
+        m_SessionId = "dev_session";
+        return true;
+    }
+
+    m_Initialized = false;
+    m_SessionId = "";
+    return false;
 }
 
 AuthResponse KeyAuthClient::Login(const std::string& username, const std::string& password)
@@ -138,8 +147,12 @@ AuthResponse KeyAuthClient::Login(const std::string& username, const std::string
         return { false, "Preencha usuario e senha." };
     }
 
-    // Modo Dev / Fallback offline
-    if (m_SessionId == "dev_session" || m_SessionId == "fallback_session" || m_OwnerId == "YOUR_OWNER_ID")
+    if (!m_Initialized || m_SessionId.empty())
+    {
+        return { false, "Autenticacao indisponivel. Verifique a configuracao do KeyAuth." };
+    }
+
+    if (m_SessionId == "dev_session")
     {
         m_User.username = username;
         m_User.subscription = "VIP Lifetime";
@@ -215,8 +228,12 @@ AuthResponse KeyAuthClient::Register(const std::string& username, const std::str
         return { false, "Preencha usuario, senha e chave de licenca." };
     }
 
-    // Modo Dev / Fallback
-    if (m_SessionId == "dev_session" || m_SessionId == "fallback_session" || m_OwnerId == "YOUR_OWNER_ID")
+    if (!m_Initialized || m_SessionId.empty())
+    {
+        return { false, "Registro indisponivel. Verifique a configuracao do KeyAuth." };
+    }
+
+    if (m_SessionId == "dev_session")
     {
         m_User.username = username;
         m_User.subscription = "VIP Lifetime";

@@ -137,7 +137,13 @@ namespace TargetSelector
                     auto fnLOS = reinterpret_cast<tGetIsLineOfSightClear>(0x0056A490);
                     if (fnLOS)
                     {
-                        float camPos[3] = { localPos[0], localPos[1], localPos[2] + 0.7f };
+                        float camPos[3];
+                        if (!GTA::GetCameraPosition(camPos))
+                        {
+                            camPos[0] = localPos[0];
+                            camPos[1] = localPos[1];
+                            camPos[2] = localPos[2] + 0.7f;
+                        }
                         // buildings=true, vehicles=false, peds=false, objects=true, dummies=false
                         isVisible = fnLOS(camPos, boneWorldPos, true, false, false, true, false, false, false);
                     }

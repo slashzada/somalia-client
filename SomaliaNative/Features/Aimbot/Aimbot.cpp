@@ -28,7 +28,10 @@ namespace Aimbot
             if (pLocalPed)
             {
                 uint8_t slot = *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(pLocalPed) + 0x718);
-                return *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(pLocalPed) + 0x5A0 + slot * 0x1C);
+                if (slot < 13)
+                {
+                    return *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(pLocalPed) + 0x5A0 + slot * 0x1C);
+                }
             }
         }
         __except (EXCEPTION_EXECUTE_HANDLER) {}
@@ -55,23 +58,26 @@ namespace Aimbot
             if (pLocalPed)
             {
                 uint8_t slot = *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(pLocalPed) + 0x718);
-                uint32_t weaponType = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(pLocalPed) + 0x5A0 + slot * 0x1C);
+                if (slot < 13)
+                {
+                    uint32_t weaponType = *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(pLocalPed) + 0x5A0 + slot * 0x1C);
 
-                // Snipers: 33 (Country Rifle), 34 (Sniper Rifle) -> Grupo 0
-                if (weaponType == 33 || weaponType == 34)
-                    return 0;
+                    // Snipers: 33 (Country Rifle), 34 (Sniper Rifle) -> Grupo 0
+                    if (weaponType == 33 || weaponType == 34)
+                        return 0;
 
-                // Pistols: 22 (Colt 45), 23 (Silenced), 24 (Desert Eagle) -> Grupo 1
-                if (weaponType >= 22 && weaponType <= 24)
-                    return 1;
+                    // Pistols: 22 (Colt 45), 23 (Silenced), 24 (Desert Eagle) -> Grupo 1
+                    if (weaponType >= 22 && weaponType <= 24)
+                        return 1;
 
-                // Rifles / SMGs: 28 (Uzi), 29 (MP5), 30 (AK47), 31 (M4), 32 (Tec9) -> Grupo 2
-                if (weaponType >= 28 && weaponType <= 32)
-                    return 2;
+                    // Rifles / SMGs: 28 (Uzi), 29 (MP5), 30 (AK47), 31 (M4), 32 (Tec9) -> Grupo 2
+                    if (weaponType >= 28 && weaponType <= 32)
+                        return 2;
 
-                // Shotguns: 25 (Shotgun), 26 (Sawnoff), 27 (Combat Shotgun) -> Grupo 3
-                if (weaponType >= 25 && weaponType <= 27)
-                    return 3;
+                    // Shotguns: 25 (Shotgun), 26 (Sawnoff), 27 (Combat Shotgun) -> Grupo 3
+                    if (weaponType >= 25 && weaponType <= 27)
+                        return 3;
+                }
             }
         }
         __except (EXCEPTION_EXECUTE_HANDLER)

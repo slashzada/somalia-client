@@ -46,11 +46,12 @@ namespace InputManager
             ReleaseCapture();
             ClipCursor(NULL);
 
-            // 3. Notifica o SA-MP para restaurar o controle de mouse e câmera nativa do GTA
-            SAMP::ToggleCursor(false);
-
-            // 4. Oculta o cursor nativo do Windows para o modo jogo
-            ::SetCursor(NULL);
+            // 3. Notifica o SA-MP para restaurar o controle se o SA-MP não tiver chat/diálogo aberto
+            if (!SAMP::HasActiveCursor())
+            {
+                SAMP::ToggleCursor(false);
+                ::SetCursor(NULL);
+            }
 
             Logger::Log("[SOMALIA][MENU] opened=0 cursor=GAME");
         }

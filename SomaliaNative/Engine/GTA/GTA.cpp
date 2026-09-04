@@ -146,6 +146,35 @@ namespace GTA
         return (pPed != nullptr) && (GetPedHealth(pPed) > 0.0f);
     }
 
+    bool GetCameraPosition(float outPos[3])
+    {
+        __try
+        {
+            uintptr_t pCamera = 0x00B6F99C;
+            void* pMatrix = *reinterpret_cast<void**>(pCamera + 0x14);
+            if (pMatrix)
+            {
+                float* mat = reinterpret_cast<float*>(pMatrix);
+                outPos[0] = mat[12];
+                outPos[1] = mat[13];
+                outPos[2] = mat[14];
+                return true;
+            }
+            float* coords = reinterpret_cast<float*>(pCamera + 0x4);
+            if (coords)
+            {
+                outPos[0] = coords[0];
+                outPos[1] = coords[1];
+                outPos[2] = coords[2];
+                return true;
+            }
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+        }
+        return false;
+    }
+
     bool GetCrosshairOffset(float& outX, float& outY)
     {
         __try

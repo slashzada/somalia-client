@@ -3,6 +3,8 @@
 #include "RageBot.h"
 #include "../../Core/Logger.h"
 #include "../../Core/RuntimeState.h"
+#include "../../Engine/SAMP/SAMP.h"
+#include "../../Engine/GTA/GTA.h"
 #include <math.h>
 #include <stdio.h>
 
@@ -34,6 +36,9 @@ namespace AimAssist
     bool CheckActivationCondition(int activationMode)
     {
         if (g_MenuState.menuOpen)
+            return false;
+
+        if (SAMP::IsLoaded() && SAMP::HasActiveCursor())
             return false;
 
         switch (activationMode)
@@ -155,8 +160,15 @@ namespace AimAssist
             float* pTargetVelY = reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(target.ped) + 0x48);
             if (pTargetVelX && pTargetVelY)
             {
-                deltaX += (*pTargetVelX) * 20.0f;
-                deltaY += (*pTargetVelY) * 20.0f;
+                float peekX = (*pTargetVelX) * 12.0f;
+                float peekY = (*pTargetVelY) * 12.0f;
+                if (peekX > 30.0f) peekX = 30.0f;
+                else if (peekX < -30.0f) peekX = -30.0f;
+                if (peekY > 30.0f) peekY = 30.0f;
+                else if (peekY < -30.0f) peekY = -30.0f;
+
+                deltaX += peekX;
+                deltaY += peekY;
             }
         }
 
@@ -256,8 +268,11 @@ namespace AimAssist
             if (pLocalPed)
             {
                 uint8_t slot = *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(pLocalPed) + 0x718);
-                uintptr_t weaponPtr = reinterpret_cast<uintptr_t>(pLocalPed) + 0x5A0 + slot * 0x1C;
-                *reinterpret_cast<uint32_t*>(weaponPtr + 0x10) = 1; // WEAPON_STATE_READY
+                if (slot < 13)
+                {
+                    uintptr_t weaponPtr = reinterpret_cast<uintptr_t>(pLocalPed) + 0x5A0 + slot * 0x1C;
+                    *reinterpret_cast<uint32_t*>(weaponPtr + 0x10) = 1; // WEAPON_STATE_READY
+                }
             }
         }
 

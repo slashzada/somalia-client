@@ -14,4 +14,5 @@ namespace Injector
     void StopAutoInjectThread();
     bool IsAutoInjectWaiting();
     std::string GetStatusMessage();
+    void SetStatusMessage(const std::string& msg);
 }

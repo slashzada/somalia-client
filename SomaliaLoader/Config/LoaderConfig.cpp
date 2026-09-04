@@ -2,10 +2,59 @@
 #include <fstream>
 #include <sstream>
 #include <windows.h>
+#include <cstdlib>
 
 namespace ConfigManager
 {
     static LoaderConfig s_Config;
+
+    static std::string GetEnvValue(const char* name)
+    {
+        char* value = nullptr;
+        size_t len = 0;
+        if (_dupenv_s(&value, &len, name) != 0 || value == nullptr)
+        {
+            return "";
+        }
+
+        std::string result(value);
+        free(value);
+        return result;
+    }
+
+    static std::string EscapeJsonString(const std::string& value)
+    {
+        std::string escaped;
+        escaped.reserve(value.size());
+        for (char ch : value)
+        {
+            switch (ch)
+            {
+            case '\\': escaped += "\\\\"; break;
+            case '"': escaped += "\\\""; break;
+            case '\n': escaped += "\\n"; break;
+            case '\r': escaped += "\\r"; break;
+            case '\t': escaped += "\\t"; break;
+            default: escaped += ch; break;
+            }
+        }
+        return escaped;
+    }
+
+    static void ApplyKeyAuthEnvOverrides()
+    {
+        std::string envName = GetEnvValue("SOMALIA_KEYAUTH_NAME");
+        if (!envName.empty()) s_Config.keyauthName = envName;
+
+        std::string envOwner = GetEnvValue("SOMALIA_KEYAUTH_OWNER");
+        if (!envOwner.empty()) s_Config.keyauthOwner = envOwner;
+
+        std::string envSecret = GetEnvValue("SOMALIA_KEYAUTH_SECRET");
+        if (!envSecret.empty()) s_Config.keyauthSecret = envSecret;
+
+        std::string envVersion = GetEnvValue("SOMALIA_KEYAUTH_VERSION");
+        if (!envVersion.empty()) s_Config.keyauthVersion = envVersion;
+    }
 
     LoaderConfig& Get()
     {
@@ -61,7 +110,11 @@ namespace ConfigManager
     bool Load(const std::string& filePath)
     {
         std::ifstream f(filePath);
-        if (!f.is_open()) return false;
+        if (!f.is_open())
+        {
+            ApplyKeyAuthEnvOverrides();
+            return false;
+        }
 
         std::stringstream ss;
         ss << f.rdbuf();
@@ -100,6 +153,8 @@ namespace ConfigManager
         std::string kver = ExtractJsonValue(c, "keyauth_version");
         if (!kver.empty()) s_Config.keyauthVersion = kver;
 
+        ApplyKeyAuthEnvOverrides();
+
         return true;
     }
 
@@ -108,26 +163,18 @@ namespace ConfigManager
         std::ofstream f(filePath, std::ios::trunc);
         if (!f.is_open()) return false;
 
-        // Escape path \\ -> \\\\ for valid JSON
-        std::string escapedPath;
-        for (char ch : s_Config.gtaPath)
-        {
-            if (ch == '\\') escapedPath += "\\\\";
-            else escapedPath += ch;
-        }
-
         f << "{\n";
-        f << "    \"gta_path\": \"" << escapedPath << "\",\n";
+        f << "    \"gta_path\": \"" << EscapeJsonString(s_Config.gtaPath) << "\",\n";
         f << "    \"remember_user\": " << (s_Config.rememberUser ? "true" : "false") << ",\n";
-        f << "    \"last_username\": \"" << s_Config.lastUsername << "\",\n";
-        f << "    \"user_subscription\": \"" << s_Config.userSubscription << "\",\n";
-        f << "    \"user_expiry\": \"" << s_Config.userExpiry << "\",\n";
-        f << "    \"user_days_left\": \"" << s_Config.userDaysLeft << "\",\n";
-        f << "    \"session_id\": \"" << s_Config.sessionId << "\",\n";
-        f << "    \"keyauth_name\": \"" << s_Config.keyauthName << "\",\n";
-        f << "    \"keyauth_owner\": \"" << s_Config.keyauthOwner << "\",\n";
-        f << "    \"keyauth_secret\": \"" << s_Config.keyauthSecret << "\",\n";
-        f << "    \"keyauth_version\": \"" << s_Config.keyauthVersion << "\"\n";
+        f << "    \"last_username\": \"" << EscapeJsonString(s_Config.lastUsername) << "\",\n";
+        f << "    \"user_subscription\": \"" << EscapeJsonString(s_Config.userSubscription) << "\",\n";
+        f << "    \"user_expiry\": \"" << EscapeJsonString(s_Config.userExpiry) << "\",\n";
+        f << "    \"user_days_left\": \"" << EscapeJsonString(s_Config.userDaysLeft) << "\",\n";
+        f << "    \"session_id\": \"" << EscapeJsonString(s_Config.sessionId) << "\",\n";
+        f << "    \"keyauth_name\": \"" << EscapeJsonString(s_Config.keyauthName) << "\",\n";
+        f << "    \"keyauth_owner\": \"" << EscapeJsonString(s_Config.keyauthOwner) << "\",\n";
+        f << "    \"keyauth_secret\": \"" << EscapeJsonString(s_Config.keyauthSecret) << "\",\n";
+        f << "    \"keyauth_version\": \"" << EscapeJsonString(s_Config.keyauthVersion) << "\"\n";
         f << "}\n";
 
         return true;

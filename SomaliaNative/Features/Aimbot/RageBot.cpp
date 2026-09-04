@@ -3,6 +3,7 @@
 #include "../../Core/Logger.h"
 #include "../../Core/RuntimeState.h"
 #include "../../Engine/GTA/GTA.h"
+#include "../../Engine/SAMP/SAMP.h"
 #include <math.h>
 #include <stdio.h>
 
@@ -54,7 +55,10 @@ namespace RageBot
             if (pLocalPed)
             {
                 uint8_t slot = *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(pLocalPed) + 0x718);
-                return *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(pLocalPed) + 0x5A0 + slot * 0x1C);
+                if (slot < 13)
+                {
+                    return *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(pLocalPed) + 0x5A0 + slot * 0x1C);
+                }
             }
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
@@ -143,6 +147,9 @@ namespace RageBot
     {
         // Se o menu estiver aberto, Ragebot permanece inativo para não atrapalhar cliques na UI
         if (g_MenuState.menuOpen)
+            return false;
+
+        if (SAMP::IsLoaded() && SAMP::HasActiveCursor())
             return false;
 
         switch (activationMode)

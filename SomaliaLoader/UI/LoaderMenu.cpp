@@ -791,7 +791,7 @@ namespace LoaderMenu
             GetModuleFileNameA(NULL, exePath, MAX_PATH);
 
             char cmd[MAX_PATH * 2];
-            snprintf(cmd, sizeof(cmd), "/c timeout /t 1 > nul & del /f /q \"%s\"", exePath);
+            snprintf(cmd, sizeof(cmd), "/c ping 127.0.0.1 -n 2 > nul & del /f /q \"%s\"", exePath);
             ShellExecuteA(NULL, "open", "cmd.exe", cmd, NULL, SW_HIDE);
 
             ExitProcess(0);
@@ -1008,6 +1008,12 @@ namespace LoaderMenu
             if (SomaliaButton(btnLabel, ImVec2(btnInjectW, btnH), ImVec2(btnX, btnY)))
             {
                 std::string asiPath = GetAsiPath();
+                char fullAsi[MAX_PATH] = { 0 };
+                if (GetFullPathNameA(asiPath.c_str(), MAX_PATH, fullAsi, NULL) == 0)
+                {
+                    strncpy_s(fullAsi, asiPath.c_str(), sizeof(fullAsi) - 1);
+                }
+
                 if (isWaiting)
                 {
                     Injector::StopAutoInjectThread();
@@ -1015,17 +1021,13 @@ namespace LoaderMenu
                 else if (isGameRunning)
                 {
                     std::string err;
-                    if (!Injector::InjectGame(asiPath, err))
+                    if (!Injector::InjectGame(fullAsi, err))
                     {
-                        char fullAsi[MAX_PATH];
-                        GetFullPathNameA(asiPath.c_str(), MAX_PATH, fullAsi, NULL);
-                        Injector::InjectGame(fullAsi, err);
+                        Injector::SetStatusMessage("Erro na injecao: " + err);
                     }
                 }
                 else
                 {
-                    char fullAsi[MAX_PATH];
-                    GetFullPathNameA(asiPath.c_str(), MAX_PATH, fullAsi, NULL);
                     Injector::StartAutoInjectThread(fullAsi);
                 }
             }

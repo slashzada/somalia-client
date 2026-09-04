@@ -20,11 +20,19 @@ static std::atomic<ShutdownState> s_ShutdownState(ShutdownState::Running);
 static HANDLE s_hInitThread = nullptr;
 static HANDLE s_hShutdownThread = nullptr;
 static HANDLE s_hCancelInitEvent = nullptr;
+static HANDLE s_hExternalUnloadEvent = nullptr;
+static HANDLE s_hUnloadListenerThread = nullptr;
 static SRWLOCK s_CallbackLock = SRWLOCK_INIT;
 static int s_ActiveCallbacks = 0;
 static HANDLE s_hZeroCallbacksEvent = nullptr;
 
 static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam);
+static DWORD WINAPI UnloadListenerThread(LPVOID lpParam);
+
+extern "C" __declspec(dllexport) void UnloadSomalia()
+{
+    Main::RequestUnload();
+}
 
 static HANDLE GetOrCreateZeroCallbacksEvent()
 {
@@ -151,6 +159,28 @@ namespace Main
     }
 }
 
+static DWORD WINAPI UnloadListenerThread(LPVOID lpParam)
+{
+    while (!Main::IsShuttingDown())
+    {
+        if (s_hExternalUnloadEvent)
+        {
+            DWORD res = WaitForSingleObject(s_hExternalUnloadEvent, 200);
+            if (res == WAIT_OBJECT_0)
+            {
+                Logger::Log("[SOMALIA][LIFECYCLE] Sinal de Unload externo detectado! Iniciando shutdown cooperativo...");
+                Main::RequestUnload();
+                break;
+            }
+        }
+        else
+        {
+            Sleep(200);
+        }
+    }
+    return 0;
+}
+
 static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam)
 {
     Logger::Log("[SOMALIA][UNLOAD] STOPPING");
@@ -158,8 +188,19 @@ static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam)
     // 4. Bloquear lógica interna de novos callbacks:
     // Já garantido pois s_ShutdownState == Stopping, fazendo CallbackGuard::IsActive() retornar false para novos callbacks.
 
-    // 5 & 6. Sinalizar cancelamento e aguardar cooperativamente a InitializationThread
+    // 5 & 6. Sinalizar cancelamento e aguardar cooperativamente threads de suporte
     Logger::Log("[SOMALIA][UNLOAD] THREADS STOP REQUESTED");
+    if (s_hExternalUnloadEvent)
+    {
+        SetEvent(s_hExternalUnloadEvent);
+    }
+    if (s_hUnloadListenerThread != nullptr)
+    {
+        WaitForSingleObject(s_hUnloadListenerThread, 2000);
+        CloseHandle(s_hUnloadListenerThread);
+        s_hUnloadListenerThread = nullptr;
+        Logger::Log("[SOMALIA][UNLOAD] THREAD UnloadListenerThread STOPPED");
+    }
     if (s_hCancelInitEvent)
     {
         SetEvent(s_hCancelInitEvent);
@@ -246,6 +287,12 @@ static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam)
     {
         CloseHandle(s_hCancelInitEvent);
         s_hCancelInitEvent = nullptr;
+    }
+
+    if (s_hExternalUnloadEvent)
+    {
+        CloseHandle(s_hExternalUnloadEvent);
+        s_hExternalUnloadEvent = nullptr;
     }
 
     // 14. Executar FreeLibraryAndExitThread(...) em um único local controlado
@@ -342,6 +389,12 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
         s_hModule = hModule;
         DisableThreadLibraryCalls(hModule);
         s_hCancelInitEvent = CreateEventA(NULL, TRUE, FALSE, NULL);
+        s_hExternalUnloadEvent = CreateEventA(NULL, FALSE, FALSE, "Global\\SomaliaNative_RequestUnload");
+        if (!s_hExternalUnloadEvent)
+        {
+            s_hExternalUnloadEvent = CreateEventA(NULL, FALSE, FALSE, "SomaliaNative_RequestUnload");
+        }
+        s_hUnloadListenerThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)UnloadListenerThread, NULL, 0, NULL);
         s_hInitThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)InitializationThread, NULL, 0, NULL);
         break;
 

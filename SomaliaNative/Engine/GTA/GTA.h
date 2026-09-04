@@ -23,6 +23,9 @@ namespace GTA
     float GetPedArmor(void* pPed);
     bool IsPedAlive(void* pPed);
 
+    // Posicao nativa e real da Camera do jogo (0x00B6F99C / TheCamera)
+    bool GetCameraPosition(float outPos[3]);
+
     // Coordenadas reais da mira (Crosshair) na tela do GTA SA 1.0 US
     bool GetCrosshairOffset(float& outX, float& outY);
     ImVec2 GetCrosshairScreenPos();
