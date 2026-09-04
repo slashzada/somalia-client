@@ -102,28 +102,35 @@ namespace Main
     bool EnterCallback()
     {
         AcquireSRWLockExclusive(&s_CallbackLock);
+        if (s_ShutdownState.load() != ShutdownState::Running)
+        {
+            ReleaseSRWLockExclusive(&s_CallbackLock);
+            return false;
+        }
+
         s_ActiveCallbacks++;
         HANDLE hEvent = GetOrCreateZeroCallbacksEvent();
         if (hEvent)
         {
             ResetEvent(hEvent);
         }
-        bool canExecuteInternal = (s_ShutdownState.load() == ShutdownState::Running);
         ReleaseSRWLockExclusive(&s_CallbackLock);
-        return canExecuteInternal;
+        return true;
     }
 
     void LeaveCallback()
     {
         AcquireSRWLockExclusive(&s_CallbackLock);
-        s_ActiveCallbacks--;
-        if (s_ActiveCallbacks <= 0)
+        if (s_ActiveCallbacks > 0)
         {
-            s_ActiveCallbacks = 0;
-            HANDLE hEvent = GetOrCreateZeroCallbacksEvent();
-            if (hEvent)
+            s_ActiveCallbacks--;
+            if (s_ActiveCallbacks == 0)
             {
-                SetEvent(hEvent);
+                HANDLE hEvent = GetOrCreateZeroCallbacksEvent();
+                if (hEvent)
+                {
+                    SetEvent(hEvent);
+                }
             }
         }
         ReleaseSRWLockExclusive(&s_CallbackLock);

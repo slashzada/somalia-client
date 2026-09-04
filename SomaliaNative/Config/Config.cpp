@@ -1,5 +1,7 @@
 #include "Config.h"
 #include "../Core/Logger.h"
+#include "../../Common/MiniJson.h"
+#include "../../Common/SharedSession.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -299,7 +301,7 @@ namespace Config
             return false;
         }
 
-        // Validação estrutural básica de JSON
+        // ValidaÃ§Ã£o estrutural bÃ¡sica de JSON
         const char* pOpen = strchr(buffer, '{');
         const char* pClose = strrchr(buffer, '}');
         if (!pOpen || !pClose || pClose <= pOpen)
@@ -308,7 +310,7 @@ namespace Config
             return false;
         }
 
-        // Parse temporário: g_MenuState só é atualizado se a validação passar
+        // Parse temporÃ¡rio: g_MenuState sÃ³ Ã© atualizado se a validaÃ§Ã£o passar
         MenuState tempState = g_MenuState;
 
         int configVersion = ParseInt(buffer, "\"config_version\"", 1);
@@ -527,7 +529,7 @@ namespace Config
             tempState.misc.watermark = ParseBool(pMisc, "\"watermark\"", tempState.misc.watermark);
         }
 
-        // Validação e Clamping defensivo
+        // ValidaÃ§Ã£o e Clamping defensivo
         if (tempState.visuals.maxDistance < 10) tempState.visuals.maxDistance = 10;
         if (tempState.visuals.maxDistance > 1000) tempState.visuals.maxDistance = 1000;
         if (tempState.visuals.fovCircleRadius < 5) tempState.visuals.fovCircleRadius = 5;
@@ -553,7 +555,7 @@ namespace Config
             if (tempState.silentAim.weapons[i].hitChance > 100) tempState.silentAim.weapons[i].hitChance = 100;
         }
 
-        // Aplicação atômica do estado validado
+        // AplicaÃ§Ã£o atÃ´mica do estado validado
         g_MenuState = tempState;
         return true;
     }
@@ -638,20 +640,9 @@ namespace Config
         return out;
     }
 
-    static std::string ReadSessionIdFromClientJson()
+    static std::string ReadSessionIdFromSharedMemory()
     {
-        std::ifstream f("somalia_client.json");
-        if (!f.is_open()) return "";
-        std::string str((std::istreambuf_iterator<char>(f)), std::istreambuf_iterator<char>());
-        size_t p = str.find("\"session_id\"");
-        if (p == std::string::npos) return "";
-        size_t colon = str.find(':', p);
-        if (colon == std::string::npos) return "";
-        size_t start = str.find('\"', colon);
-        if (start == std::string::npos) return "";
-        size_t end = str.find('\"', start + 1);
-        if (end == std::string::npos) return "";
-        return str.substr(start + 1, end - start - 1);
+        return SharedSession::ReadSessionId();
     }
 
     static std::string KeyAuthPost(const std::string& postData)
@@ -698,10 +689,10 @@ namespace Config
 
     bool SaveToCloud(const std::string& configName, std::string& outMsg)
     {
-        std::string sid = ReadSessionIdFromClientJson();
+        std::string sid = ReadSessionIdFromSharedMemory();
         if (sid.empty())
         {
-            outMsg = "Sessao nao encontrada. Faca login pelo loader primeiro.";
+            outMsg = "Sessao nao encontrada. Abra o loader e faca login primeiro.";
             return false;
         }
 
@@ -712,10 +703,15 @@ namespace Config
                                "&sessionid=" + sid + "&name=somalia&ownerid=5bU1fK1ki3";
 
         std::string resp = KeyAuthPost(postData);
-        if (resp.find("\"success\":true") != std::string::npos || resp.find("\"success\": true") != std::string::npos)
+        MiniJson::JsonValue root;
+        std::string err;
+        if (MiniJson::Parser::Parse(resp, root, err) && root.is_object())
         {
-            outMsg = "Configuracao salva na Nuvem com sucesso!";
-            return true;
+            if (root.get_bool("success"))
+            {
+                outMsg = "Configuracao salva na Nuvem com sucesso!";
+                return true;
+            }
         }
 
         outMsg = "Falha ao salvar na Nuvem. Verifique sua conexao.";
@@ -724,10 +720,10 @@ namespace Config
 
     bool LoadFromCloud(const std::string& configName, std::string& outMsg)
     {
-        std::string sid = ReadSessionIdFromClientJson();
+        std::string sid = ReadSessionIdFromSharedMemory();
         if (sid.empty())
         {
-            outMsg = "Sessao nao encontrada. Faca login pelo loader primeiro.";
+            outMsg = "Sessao nao encontrada. Abra o loader e faca login primeiro.";
             return false;
         }
 
@@ -735,28 +731,20 @@ namespace Config
                                "&sessionid=" + sid + "&name=somalia&ownerid=5bU1fK1ki3";
 
         std::string resp = KeyAuthPost(postData);
-        if (resp.find("\"success\":true") != std::string::npos || resp.find("\"success\": true") != std::string::npos)
+        MiniJson::JsonValue root;
+        std::string err;
+        if (MiniJson::Parser::Parse(resp, root, err) && root.is_object())
         {
-            size_t p = resp.find("\"response\"");
-            if (p != std::string::npos)
+            if (root.get_bool("success"))
             {
-                size_t colon = resp.find(':', p);
-                if (colon != std::string::npos)
+                std::string b64 = root.get_string("response");
+                if (!b64.empty())
                 {
-                    size_t start = resp.find('\"', colon);
-                    if (start != std::string::npos)
+                    std::string decoded = Base64Decode(b64);
+                    if (!decoded.empty() && LoadFromString(decoded.c_str()))
                     {
-                        size_t end = resp.find('\"', start + 1);
-                        if (end != std::string::npos)
-                        {
-                            std::string b64 = resp.substr(start + 1, end - start - 1);
-                            std::string decoded = Base64Decode(b64);
-                            if (!decoded.empty() && LoadFromString(decoded.c_str()))
-                            {
-                                outMsg = "Configuracao carregada da Nuvem com sucesso!";
-                                return true;
-                            }
-                        }
+                        outMsg = "Configuracao carregada da Nuvem com sucesso!";
+                        return true;
                     }
                 }
             }

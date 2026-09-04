@@ -1,26 +1,28 @@
 #include "GTA.h"
+#include "../../Common/SafeMemory.h"
 
 namespace GTA
 {
-    // Endereço único e protegido do dispositivo D3D9 no GTA SA 1.0 US (RwD3D9Device)
+    // Endereco unico e protegido do dispositivo D3D9 no GTA SA 1.0 US (RwD3D9Device)
     static constexpr uintptr_t ADDR_RW_D3D9_DEVICE = 0x00C97C28;
-    // Endereço único da janela Win32 no GTA SA 1.0 US (RsGlobal.ps->window)
+    // Endereco unico da janela Win32 no GTA SA 1.0 US (RsGlobal.ps->window)
     static constexpr uintptr_t ADDR_RW_HWND        = 0x00C97C1C;
 
     IDirect3DDevice9* GetD3DDevice()
     {
-        // Leitura defensiva: verifica se o endereço é acessível e não-nulo
         __try
         {
             IDirect3DDevice9** ppDevice = reinterpret_cast<IDirect3DDevice9**>(ADDR_RW_D3D9_DEVICE);
-            if (ppDevice && *ppDevice)
+            if (ppDevice && SafeMemory::IsValidReadPtr(ppDevice, sizeof(void*)) && *ppDevice)
             {
                 IDirect3DDevice9* pDevice = *ppDevice;
-                // Valida se a VTable é legível
-                void** pVTable = *reinterpret_cast<void***>(pDevice);
-                if (pVTable && pVTable[17] != nullptr)
+                if (SafeMemory::IsValidReadPtr(pDevice, sizeof(void*)))
                 {
-                    return pDevice;
+                    void** pVTable = *reinterpret_cast<void***>(pDevice);
+                    if (pVTable && SafeMemory::IsValidReadPtr(pVTable, sizeof(void*) * 20) && pVTable[17] != nullptr)
+                    {
+                        return pDevice;
+                    }
                 }
             }
         }
@@ -36,22 +38,33 @@ namespace GTA
         __try
         {
             HWND* pHwnd = reinterpret_cast<HWND*>(ADDR_RW_HWND);
-            if (pHwnd && *pHwnd && IsWindow(*pHwnd))
+            if (pHwnd && SafeMemory::IsValidReadPtr(pHwnd, sizeof(HWND)) && *pHwnd && IsWindow(*pHwnd))
             {
-                return *pHwnd;
+                DWORD pid = 0;
+                GetWindowThreadProcessId(*pHwnd, &pid);
+                if (pid == GetCurrentProcessId())
+                {
+                    return *pHwnd;
+                }
             }
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
         {
-            // fallback
         }
 
-        // Fallback caso a estrutura RenderWare ainda não tenha populado a janela
+        // Fallback caso a estrutura RenderWare ainda nao tenha populado a janela
         HWND hWnd = FindWindowA("Grand theft auto San Andreas", NULL);
         if (hWnd && IsWindow(hWnd))
-            return hWnd;
+        {
+            DWORD pid = 0;
+            GetWindowThreadProcessId(hWnd, &pid);
+            if (pid == GetCurrentProcessId())
+            {
+                return hWnd;
+            }
+        }
 
-        return GetActiveWindow();
+        return nullptr;
     }
 
     bool IsReady()
@@ -75,12 +88,12 @@ namespace GTA
 
     bool GetPedPosition(void* pPed, float outPos[3])
     {
-        if (!pPed) return false;
+        if (!pPed || !SafeMemory::IsValidReadPtr(pPed, 0x18)) return false;
         __try
         {
             uintptr_t pedAddr = reinterpret_cast<uintptr_t>(pPed);
             void* pMatrix = *reinterpret_cast<void**>(pedAddr + 0x14);
-            if (pMatrix)
+            if (pMatrix && SafeMemory::IsValidReadPtr(pMatrix, sizeof(float) * 16))
             {
                 float* mat = reinterpret_cast<float*>(pMatrix);
                 outPos[0] = mat[12];
@@ -89,10 +102,14 @@ namespace GTA
                 return true;
             }
             float* coords = reinterpret_cast<float*>(pedAddr + 0x4);
-            outPos[0] = coords[0];
-            outPos[1] = coords[1];
-            outPos[2] = coords[2];
-            return true;
+            if (SafeMemory::IsValidReadPtr(coords, sizeof(float) * 3))
+            {
+                outPos[0] = coords[0];
+                outPos[1] = coords[1];
+                outPos[2] = coords[2];
+                return true;
+            }
+            return false;
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
         {
@@ -102,7 +119,7 @@ namespace GTA
 
     bool GetPedBonePosition(void* pPed, int boneId, float outPos[3])
     {
-        if (!pPed) return false;
+        if (!pPed || !SafeMemory::IsValidReadPtr(pPed, 0x550)) return false;
         __try
         {
             auto fnGetBone = reinterpret_cast<void(__thiscall*)(void*, float[3], unsigned int, bool)>(0x005E4280);
@@ -117,7 +134,7 @@ namespace GTA
 
     float GetPedHealth(void* pPed)
     {
-        if (!pPed) return 0.0f;
+        if (!pPed || !SafeMemory::IsValidReadPtr(pPed, 0x544)) return 0.0f;
         __try
         {
             return *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pPed) + 0x540);
@@ -130,7 +147,7 @@ namespace GTA
 
     float GetPedArmor(void* pPed)
     {
-        if (!pPed) return 0.0f;
+        if (!pPed || !SafeMemory::IsValidReadPtr(pPed, 0x54C)) return 0.0f;
         __try
         {
             return *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pPed) + 0x548);
@@ -151,8 +168,10 @@ namespace GTA
         __try
         {
             uintptr_t pCamera = 0x00B6F99C;
+            if (!SafeMemory::IsValidReadPtr(reinterpret_cast<void*>(pCamera), 0x18)) return false;
+
             void* pMatrix = *reinterpret_cast<void**>(pCamera + 0x14);
-            if (pMatrix)
+            if (pMatrix && SafeMemory::IsValidReadPtr(pMatrix, sizeof(float) * 16))
             {
                 float* mat = reinterpret_cast<float*>(pMatrix);
                 outPos[0] = mat[12];
@@ -161,7 +180,7 @@ namespace GTA
                 return true;
             }
             float* coords = reinterpret_cast<float*>(pCamera + 0x4);
-            if (coords)
+            if (coords && SafeMemory::IsValidReadPtr(coords, sizeof(float) * 3))
             {
                 outPos[0] = coords[0];
                 outPos[1] = coords[1];
@@ -181,7 +200,7 @@ namespace GTA
         {
             float* pCrossX = reinterpret_cast<float*>(0x00B6EC14);
             float* pCrossY = reinterpret_cast<float*>(0x00B6EC10);
-            if (pCrossX && pCrossY)
+            if (pCrossX && pCrossY && SafeMemory::IsValidReadPtr(pCrossX, sizeof(float)) && SafeMemory::IsValidReadPtr(pCrossY, sizeof(float)))
             {
                 float x = *pCrossX;
                 float y = *pCrossY;
@@ -216,7 +235,7 @@ namespace GTA
         __try
         {
             float* pSens = reinterpret_cast<float*>(0x00B6EC1C);
-            if (pSens && *pSens > 0.0001f && *pSens < 10.0f)
+            if (pSens && SafeMemory::IsValidReadPtr(pSens, sizeof(float)) && *pSens > 0.0001f && *pSens < 10.0f)
             {
                 return *pSens;
             }
@@ -226,4 +245,3 @@ namespace GTA
         return 0.0025f;
     }
 }
-

@@ -9,6 +9,7 @@
 #include "../../Features/Aimbot/TargetSelector.h"
 #include "../../Features/AntiAim/AntiAim.h"
 #include "../../Core/RuntimeState.h"
+#include "../../../Common/SafeMemory.h"
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -55,11 +56,11 @@ namespace SAMP
         __try
         {
             PIMAGE_DOS_HEADER pDos = reinterpret_cast<PIMAGE_DOS_HEADER>(sampBase);
-            if (!pDos || IsBadReadPtr(pDos, sizeof(IMAGE_DOS_HEADER)) || pDos->e_magic != IMAGE_DOS_SIGNATURE)
+            if (!pDos || !SafeMemory::IsValidReadPtr(pDos, sizeof(IMAGE_DOS_HEADER)) || pDos->e_magic != IMAGE_DOS_SIGNATURE)
                 return;
 
             PIMAGE_NT_HEADERS pNt = reinterpret_cast<PIMAGE_NT_HEADERS>(sampBase + pDos->e_lfanew);
-            if (!pNt || IsBadReadPtr(pNt, sizeof(IMAGE_NT_HEADERS)) || pNt->Signature != IMAGE_NT_SIGNATURE)
+            if (!pNt || !SafeMemory::IsValidReadPtr(pNt, sizeof(IMAGE_NT_HEADERS)) || pNt->Signature != IMAGE_NT_SIGNATURE)
                 return;
 
             DWORD entryPoint = pNt->OptionalHeader.AddressOfEntryPoint;
@@ -111,27 +112,27 @@ namespace SAMP
                 unsigned char* pR5 = reinterpret_cast<unsigned char*>(sampBase + 0xA0890);
                 unsigned char* pDL = reinterpret_cast<unsigned char*>(sampBase + 0xA0530);
 
-                if (pR1 && !IsBadReadPtr(pR1, 5) && pR1[0] == 0x55 && pR1[1] == 0x8B && pR1[2] == 0xEC && pR1[3] == 0x83 && pR1[4] == 0xEC)
+                if (pR1 && SafeMemory::IsValidReadPtr(pR1, 5) && pR1[0] == 0x55 && pR1[1] == 0x8B && pR1[2] == 0xEC && pR1[3] == 0x83 && pR1[4] == 0xEC)
                 {
                     s_Version = Version::R1;
                     s_Config = { "0.3.7-R1 (Signature)", 0x21A0F8, 0x21A10C, 0x9BD30, 0x9BC10, 0x3CD, 0x18, 0x2E, 0xFDE, 0x4 };
                 }
-                else if (pR3 && !IsBadReadPtr(pR3, 5) && pR3[0] == 0x55 && pR3[1] == 0x8B && pR3[2] == 0xEC && pR3[3] == 0x83 && pR3[4] == 0xEC)
+                else if (pR3 && SafeMemory::IsValidReadPtr(pR3, 5) && pR3[0] == 0x55 && pR3[1] == 0x8B && pR3[2] == 0xEC && pR3[3] == 0x83 && pR3[4] == 0xEC)
                 {
                     s_Version = Version::R3;
                     s_Config = { "0.3.7-R3 (Signature)", 0x26E8DC, 0x26E8F4, 0x9FFE0, 0x9FEC0, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C };
                 }
-                else if (pR4 && !IsBadReadPtr(pR4, 5) && pR4[0] == 0x55 && pR4[1] == 0x8B && pR4[2] == 0xEC && pR4[3] == 0x83 && pR4[4] == 0xEC)
+                else if (pR4 && SafeMemory::IsValidReadPtr(pR4, 5) && pR4[0] == 0x55 && pR4[1] == 0x8B && pR4[2] == 0xEC && pR4[3] == 0x83 && pR4[4] == 0xEC)
                 {
                     s_Version = Version::R4;
                     s_Config = { "0.3.7-R4 (Signature)", 0x26EA04, 0x26EA0C, 0xA0750, 0xA0630, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C };
                 }
-                else if (pR5 && !IsBadReadPtr(pR5, 5) && pR5[0] == 0x55 && pR5[1] == 0x8B && pR5[2] == 0xEC && pR5[3] == 0x83 && pR5[4] == 0xEC)
+                else if (pR5 && SafeMemory::IsValidReadPtr(pR5, 5) && pR5[0] == 0x55 && pR5[1] == 0x8B && pR5[2] == 0xEC && pR5[3] == 0x83 && pR5[4] == 0xEC)
                 {
                     s_Version = Version::R5;
                     s_Config = { "0.3.7-R5 (Signature)", 0x26EB94, 0x26EBAC, 0xA0890, 0xA0770, 0x3DE, 0x4, 0x4, 0xFB4, 0x2F1C };
                 }
-                else if (pDL && !IsBadReadPtr(pDL, 5) && pDL[0] == 0x55 && pDL[1] == 0x8B && pDL[2] == 0xEC && pDL[3] == 0x83 && pDL[4] == 0xEC)
+                else if (pDL && SafeMemory::IsValidReadPtr(pDL, 5) && pDL[0] == 0x55 && pDL[1] == 0x8B && pDL[2] == 0xEC && pDL[3] == 0x83 && pDL[4] == 0xEC)
                 {
                     s_Version = Version::DL;
                     s_Config = { "0.3.DL-1 (Signature)", 0x2ACA14, 0x2ACA24, 0xA0530, 0xA0410, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C };
@@ -181,14 +182,11 @@ namespace SAMP
         uintptr_t sampBase = GetBaseAddress();
         if (!sampBase) return 0;
 
-        __try
-        {
-            return *reinterpret_cast<uintptr_t*>(sampBase + s_Config.infoOffset);
-        }
-        __except (EXCEPTION_EXECUTE_HANDLER)
-        {
+        uintptr_t pSAMP = 0;
+        if (!SafeMemory::SafeRead(sampBase + s_Config.infoOffset, pSAMP))
             return 0;
-        }
+
+        return pSAMP;
     }
 
     uintptr_t GetPools()
@@ -196,14 +194,11 @@ namespace SAMP
         uintptr_t pSAMP = GetSAMPInfo();
         if (!pSAMP) return 0;
 
-        __try
-        {
-            return *reinterpret_cast<uintptr_t*>(pSAMP + s_Config.poolsOffset);
-        }
-        __except (EXCEPTION_EXECUTE_HANDLER)
-        {
+        uintptr_t pPools = 0;
+        if (!SafeMemory::SafeRead(pSAMP + s_Config.poolsOffset, pPools))
             return 0;
-        }
+
+        return pPools;
     }
 
     uintptr_t GetPlayerPool()
@@ -211,14 +206,11 @@ namespace SAMP
         uintptr_t pPools = GetPools();
         if (!pPools) return 0;
 
-        __try
-        {
-            return *reinterpret_cast<uintptr_t*>(pPools + s_Config.playerPoolOffset);
-        }
-        __except (EXCEPTION_EXECUTE_HANDLER)
-        {
+        uintptr_t pPlayerPool = 0;
+        if (!SafeMemory::SafeRead(pPools + s_Config.playerPoolOffset, pPlayerPool))
             return 0;
-        }
+
+        return pPlayerPool;
     }
 
     uint16_t GetLocalPlayerId()
@@ -226,14 +218,11 @@ namespace SAMP
         uintptr_t pPlayerPool = GetPlayerPool();
         if (!pPlayerPool) return 0xFFFF;
 
-        __try
-        {
-            return *reinterpret_cast<uint16_t*>(pPlayerPool + s_Config.localPlayerIdOffset);
-        }
-        __except (EXCEPTION_EXECUTE_HANDLER)
-        {
+        uint16_t localId = 0xFFFF;
+        if (!SafeMemory::SafeRead(pPlayerPool + s_Config.localPlayerIdOffset, localId))
             return 0xFFFF;
-        }
+
+        return localId;
     }
 
     uintptr_t GetLocalPlayer()
@@ -246,7 +235,7 @@ namespace SAMP
         if (!rawLocalPed)
         {
             void** ppGta = reinterpret_cast<void**>(0x00B7CD98);
-            if (ppGta && !IsBadReadPtr(ppGta, sizeof(void*)))
+            if (ppGta && SafeMemory::IsValidReadPtr(ppGta, sizeof(void*)))
                 rawLocalPed = *ppGta;
         }
 
@@ -260,10 +249,10 @@ namespace SAMP
                 primaryOff = 0x2F1C;
 
             // 1. Testa primeiro o offset primário
-            if (primaryOff != 0 && !IsBadReadPtr(reinterpret_cast<void*>(pPlayerPool + primaryOff), sizeof(void*)))
+            if (primaryOff != 0 && SafeMemory::IsValidReadPtr(reinterpret_cast<void*>(pPlayerPool + primaryOff), sizeof(void*)))
             {
                 uintptr_t pCandidate = *reinterpret_cast<uintptr_t*>(pPlayerPool + primaryOff);
-                if (pCandidate > 0x10000 && !IsBadReadPtr(reinterpret_cast<void*>(pCandidate), 64))
+                if (pCandidate > 0x10000 && SafeMemory::IsValidReadPtr(reinterpret_cast<void*>(pCandidate), 64))
                 {
                     if (rawLocalPed)
                     {
@@ -287,11 +276,11 @@ namespace SAMP
 
                 for (uintptr_t off : candidateOffsets)
                 {
-                    if (IsBadReadPtr(reinterpret_cast<void*>(pPlayerPool + off), sizeof(void*)))
+                    if (!SafeMemory::IsValidReadPtr(reinterpret_cast<void*>(pPlayerPool + off), sizeof(void*)))
                         continue;
 
                     uintptr_t pCandidate = *reinterpret_cast<uintptr_t*>(pPlayerPool + off);
-                    if (pCandidate > 0x10000 && !IsBadReadPtr(reinterpret_cast<void*>(pCandidate), 64))
+                    if (pCandidate > 0x10000 && SafeMemory::IsValidReadPtr(reinterpret_cast<void*>(pCandidate), 64))
                     {
                         void* pInternalPed = *reinterpret_cast<void**>(pCandidate);
                         if (pInternalPed == rawLocalPed)
@@ -323,13 +312,13 @@ namespace SAMP
             for (uintptr_t dOff : dataOffsets)
             {
                 uintptr_t pData = pLocal + dOff;
-                if (IsBadWritePtr(reinterpret_cast<void*>(pData), 68))
+                if (!SafeMemory::IsValidWritePtr(reinterpret_cast<void*>(pData), 68))
                     continue;
 
                 if (hasPos)
                 {
                     float* pPos = reinterpret_cast<float*>(pData + 6);
-                    if (!IsBadReadPtr(pPos, 12))
+                    if (SafeMemory::IsValidReadPtr(pPos, 12))
                     {
                         float dx = pPos[0] - localPos[0];
                         float dy = pPos[1] - localPos[1];
@@ -461,11 +450,11 @@ namespace SAMP
             outData.isValid = true;
 
             // 2.1 Lê cor e team do jogador remoto
-            if (!IsBadReadPtr(reinterpret_cast<void*>(pRemotePlayer + 0x28), sizeof(uint32_t)))
+            if (SafeMemory::IsValidReadPtr(reinterpret_cast<void*>(pRemotePlayer + 0x28), sizeof(uint32_t)))
             {
                 outData.color = *reinterpret_cast<uint32_t*>(pRemotePlayer + 0x28);
             }
-            if (!IsBadReadPtr(reinterpret_cast<void*>(pRemotePlayer + 0x8), sizeof(uint8_t)))
+            if (SafeMemory::IsValidReadPtr(reinterpret_cast<void*>(pRemotePlayer + 0x8), sizeof(uint8_t)))
             {
                 outData.team = static_cast<int>(*reinterpret_cast<uint8_t*>(pRemotePlayer + 0x8));
             }
@@ -576,7 +565,7 @@ namespace SAMP
         __try
         {
             uintptr_t colorOff = (s_Version == Version::R1) ? 0x8 : 0x10;
-            if (!IsBadReadPtr(reinterpret_cast<void*>(pPlayerPool + colorOff), sizeof(uint32_t)))
+            if (SafeMemory::IsValidReadPtr(reinterpret_cast<void*>(pPlayerPool + colorOff), sizeof(uint32_t)))
             {
                 return *reinterpret_cast<uint32_t*>(pPlayerPool + colorOff);
             }
@@ -601,7 +590,7 @@ namespace SAMP
         // Se o servidor definiu Team (diferente de 255 e -1)
         uint8_t localTeam = 255;
         uintptr_t pLocal = GetLocalPlayer();
-        if (pLocal && !IsBadReadPtr(reinterpret_cast<void*>(pLocal + 0x8), sizeof(uint8_t)))
+        if (pLocal && SafeMemory::IsValidReadPtr(reinterpret_cast<void*>(pLocal + 0x8), sizeof(uint8_t)))
         {
             localTeam = *reinterpret_cast<uint8_t*>(pLocal + 0x8);
         }
@@ -973,7 +962,7 @@ namespace SAMP
             return s_OriginalSendBitStream(pThis, pBitStream, priority, reliability, orderingChannel);
         }
 
-        if (pBitStream && !IsBadReadPtr(pBitStream, 16))
+        if (pBitStream && SafeMemory::IsValidReadPtr(pBitStream, 16))
         {
             int numberOfBitsUsed = *reinterpret_cast<int*>(reinterpret_cast<uintptr_t>(pBitStream) + 0);
             int byteCount = (numberOfBitsUsed + 7) / 8;
@@ -1042,7 +1031,7 @@ namespace SAMP
             if (packetId == 206)
             {
                 Logger::Log("[SAMP][DIAG][NET] Hooked_SendData: ID_BULLET_SYNC (206) interceptado! length=%d", length);
-                if (!IsBadWritePtr(const_cast<char*>(data), length))
+                if (SafeMemory::IsValidWritePtr(const_cast<char*>(data), length))
                 {
                     MutateBulletSyncPacket(reinterpret_cast<unsigned char*>(const_cast<char*>(data)), length);
                 }
@@ -1063,7 +1052,7 @@ namespace SAMP
             {
                 if (g_MenuState.antiAim.invertebred)
                 {
-                    if (!IsBadWritePtr(const_cast<char*>(data), length))
+                    if (SafeMemory::IsValidWritePtr(const_cast<char*>(data), length))
                     {
                         MutateInvertebredPacket(reinterpret_cast<unsigned char*>(const_cast<char*>(data)), length);
                     }
@@ -1120,14 +1109,14 @@ namespace SAMP
 
             for (uintptr_t off : candidateOffsets)
             {
-                if (IsBadReadPtr(reinterpret_cast<void*>(sampInfo + off), sizeof(void*)))
+                if (!SafeMemory::IsValidReadPtr(reinterpret_cast<void*>(sampInfo + off), sizeof(void*)))
                     continue;
 
                 uintptr_t pCandidate = *reinterpret_cast<uintptr_t*>(sampInfo + off);
-                if (pCandidate > 0x10000 && !IsBadReadPtr(reinterpret_cast<void*>(pCandidate), sizeof(void*)))
+                if (pCandidate > 0x10000 && SafeMemory::IsValidReadPtr(reinterpret_cast<void*>(pCandidate), sizeof(void*)))
                 {
                     void** vtable = *reinterpret_cast<void***>(pCandidate);
-                    if (!IsBadReadPtr(vtable, sizeof(void*) * 10))
+                    if (SafeMemory::IsValidReadPtr(vtable, sizeof(void*) * 10))
                     {
                         uintptr_t fn6 = reinterpret_cast<uintptr_t>(vtable[6]);
                         uintptr_t fn7 = reinterpret_cast<uintptr_t>(vtable[7]);
@@ -1200,7 +1189,7 @@ namespace SAMP
         bool restored = false;
 
         // 1. Tenta restaurar diretamente pela VTable cacheada
-        if (s_HookedVTable && !IsBadWritePtr(s_HookedVTable, sizeof(void*) * 10))
+        if (s_HookedVTable && SafeMemory::IsValidWritePtr(s_HookedVTable, sizeof(void*) * 10))
         {
             __try
             {
@@ -1237,15 +1226,15 @@ namespace SAMP
 
                     for (uintptr_t off : candidateOffsets)
                     {
-                        if (IsBadReadPtr(reinterpret_cast<void*>(sampInfo + off), sizeof(void*)))
+                        if (!SafeMemory::IsValidReadPtr(reinterpret_cast<void*>(sampInfo + off), sizeof(void*)))
                             continue;
 
                         uintptr_t pCandidate = *reinterpret_cast<uintptr_t*>(sampInfo + off);
-                        if (pCandidate <= 0x10000 || IsBadReadPtr(reinterpret_cast<void*>(pCandidate), sizeof(void*)))
+                        if (pCandidate <= 0x10000 || !SafeMemory::IsValidReadPtr(reinterpret_cast<void*>(pCandidate), sizeof(void*)))
                             continue;
 
                         void** vtable = *reinterpret_cast<void***>(pCandidate);
-                        if (!vtable || IsBadReadPtr(vtable, sizeof(void*) * 10))
+                        if (!vtable || !SafeMemory::IsValidReadPtr(vtable, sizeof(void*) * 10))
                             continue;
 
                         bool isOurHook = (vtable[6] == reinterpret_cast<void*>(&Hooked_SendData)) ||

@@ -1,14 +1,16 @@
 @echo off
 setlocal enabledelayedexpansion
 
+set "CONFIG=%~1"
+if "%CONFIG%"=="" set "CONFIG=Release"
+
 echo ========================================================
-echo [SOMALIA NATIVE] Iniciando compilacao da Fase 1...
+echo [SOMALIA NATIVE] Compilacao: %CONFIG% (x86 32-bit)
 echo ========================================================
 
-:: 1. Localiza vcvarsall.bat do Visual Studio dinamicamente via vswhere ou caminhos padrão
+:: 1. Localiza vcvarsall.bat do Visual Studio dinamicamente via vswhere ou caminhos padrao
 set "VS_PATH="
 
-:: Tentativa 1: Localizador oficial vswhere (detecta qualquer edição e disco)
 set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
 if exist "%VSWHERE%" (
     for /f "usebackq tokens=*" %%i in (`"%VSWHERE%" -latest -products * -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath`) do (
@@ -18,9 +20,8 @@ if exist "%VSWHERE%" (
     )
 )
 
-:: Tentativa 2: Caminhos comuns no drive C: e D:
 if "%VS_PATH%"=="" (
-    for %%D in ("C:\Program Files\Microsoft Visual Studio\2022" "C:\Program Files\Microsoft Visual Studio\18" "C:\Program Files (x86)\Microsoft Visual Studio\2019" "D:\Program Files\Microsoft Visual Studio\2022") do (
+    for %%D in ("%ProgramFiles%\Microsoft Visual Studio\2022" "%ProgramFiles%\Microsoft Visual Studio\18" "%ProgramFiles(x86)%\Microsoft Visual Studio\2019" "%ProgramFiles(x86)%\Microsoft Visual Studio\2022") do (
         for %%E in (Community Professional Enterprise BuildTools) do (
             if exist "%%~D\%%E\VC\Auxiliary\Build\vcvarsall.bat" (
                 set "VS_PATH=%%~D\%%E\VC\Auxiliary\Build\vcvarsall.bat"
@@ -37,67 +38,71 @@ if "%VS_PATH%"=="" (
 echo [INFO] Configurando ambiente MSVC x86 (32-bit)...
 call "%VS_PATH%" x86
 
-if not exist "build" mkdir "build"
-cd build
+if not exist "%~dp0build" mkdir "%~dp0build"
+pushd "%~dp0build"
 
-echo [INFO] Compilando SomaliaNative.asi...
+if /i "%CONFIG%"=="Debug" (
+    set "CL_FLAGS=/nologo /Od /MTd /Zi /std:c++20 /EHsc /W3 /D "WIN32" /D "_WINDOWS" /D "_USRDLL" /D "SOMALIANATIVE_EXPORTS" /D "_CRT_SECURE_NO_WARNINGS" /D "_DEBUG""
+    set "LINK_FLAGS=/DEBUG"
+) else (
+    set "CL_FLAGS=/nologo /O2 /MT /std:c++20 /EHsc /W3 /D "WIN32" /D "_WINDOWS" /D "_USRDLL" /D "SOMALIANATIVE_EXPORTS" /D "_CRT_SECURE_NO_WARNINGS" /D "NDEBUG""
+    set "LINK_FLAGS="
+)
 
-cl /nologo /O2 /MT /std:c++20 /EHsc /W3 /D "WIN32" /D "_WINDOWS" /D "_USRDLL" /D "SOMALIANATIVE_EXPORTS" /D "_CRT_SECURE_NO_WARNINGS" ^
-   /I ".." ^
-   /I "..\Render\ImGui" ^
-   /I "..\UI" ^
-   /I "..\Core" ^
-   /I "..\Engine" ^
-   /I "..\Config" ^
-   /I "..\Input" ^
-   /I "..\Features" ^
-   ..\Core\Main.cpp ^
-   ..\Core\Logger.cpp ^
-   ..\Core\RuntimeState.cpp ^
-   ..\Render\D3D9Hook.cpp ^
-   ..\Render\ImGui\imgui.cpp ^
-   ..\Render\ImGui\imgui_draw.cpp ^
-   ..\Render\ImGui\imgui_widgets.cpp ^
-   ..\Render\ImGui\imgui_tables.cpp ^
-   ..\Render\ImGui\imgui_impl_dx9.cpp ^
-   ..\Render\ImGui\imgui_impl_win32.cpp ^
-   ..\UI\Menu.cpp ^
-   ..\UI\Theme.cpp ^
-   ..\UI\custom.cpp ^
-   ..\Input\InputManager.cpp ^
-   ..\Config\Config.cpp ^
-   ..\Config\ConfigManager.cpp ^
-   ..\Engine\GTA\GTA.cpp ^
-   ..\Engine\SAMP\SAMP.cpp ^
-   ..\Features\Visuals\ESP.cpp ^
-   ..\Features\Aimbot\TargetSelector.cpp ^
-   ..\Features\Aimbot\Aimbot.cpp ^
-   ..\Features\Aimbot\AimAssist.cpp ^
-   ..\Features\Aimbot\RageBot.cpp ^
-   ..\Features\LocalMods\LocalMods.cpp ^
-   ..\Features\Slide\Slide.cpp ^
-   ..\Features\AntiAim\AntiAim.cpp ^
-   /link /DLL /OUT:"SomaliaNative.asi" user32.lib gdi32.lib d3d9.lib shell32.lib wininet.lib
+echo [INFO] Compilando SomaliaNative.asi (%CONFIG%)...
+
+cl %CL_FLAGS% ^
+   /I "%~dp0." ^
+   /I "%~dp0..\Common" ^
+   /I "%~dp0Render\ImGui" ^
+   /I "%~dp0UI" ^
+   /I "%~dp0Core" ^
+   /I "%~dp0Engine" ^
+   /I "%~dp0Config" ^
+   /I "%~dp0Input" ^
+   /I "%~dp0Features" ^
+   "%~dp0Core\Main.cpp" ^
+   "%~dp0Core\Logger.cpp" ^
+   "%~dp0Core\RuntimeState.cpp" ^
+   "%~dp0Render\D3D9Hook.cpp" ^
+   "%~dp0Render\ImGui\imgui.cpp" ^
+   "%~dp0Render\ImGui\imgui_draw.cpp" ^
+   "%~dp0Render\ImGui\imgui_widgets.cpp" ^
+   "%~dp0Render\ImGui\imgui_tables.cpp" ^
+   "%~dp0Render\ImGui\imgui_impl_dx9.cpp" ^
+   "%~dp0Render\ImGui\imgui_impl_win32.cpp" ^
+   "%~dp0UI\Menu.cpp" ^
+   "%~dp0UI\Theme.cpp" ^
+   "%~dp0UI\custom.cpp" ^
+   "%~dp0Input\InputManager.cpp" ^
+   "%~dp0Config\Config.cpp" ^
+   "%~dp0Config\ConfigManager.cpp" ^
+   "%~dp0Engine\GTA\GTA.cpp" ^
+   "%~dp0Engine\SAMP\SAMP.cpp" ^
+   "%~dp0Features\Visuals\ESP.cpp" ^
+   "%~dp0Features\Aimbot\TargetSelector.cpp" ^
+   "%~dp0Features\Aimbot\Aimbot.cpp" ^
+   "%~dp0Features\Aimbot\AimAssist.cpp" ^
+   "%~dp0Features\Aimbot\RageBot.cpp" ^
+   "%~dp0Features\LocalMods\LocalMods.cpp" ^
+   "%~dp0Features\Slide\Slide.cpp" ^
+   "%~dp0Features\AntiAim\AntiAim.cpp" ^
+   /link /DLL %LINK_FLAGS% /OUT:"SomaliaNative.asi" user32.lib gdi32.lib d3d9.lib shell32.lib wininet.lib advapi32.lib
 
 if %ERRORLEVEL% EQU 0 (
     echo ========================================================
-    echo [SUCESSO] SomaliaNative.asi compilado com sucesso!
+    echo [SUCESSO] SomaliaNative.asi compilado com sucesso! [%CONFIG%]
     echo Local: %CD%\SomaliaNative.asi
     echo ========================================================
-    copy /Y "SomaliaNative.asi" "..\..\dist\SomaliaNative.asi" >nul
-    copy /Y "SomaliaNative.asi" "..\..\SomaliaNative.asi" >nul
-    if exist "C:\Users\Usuario\Downloads\slash again\slash again" (
-        copy /Y "SomaliaNative.asi" "C:\Users\Usuario\Downloads\slash again\slash again\SomaliaNative.asi" >nul
-    )
-    if exist "D:\sa-mpo\slash again" (
-        copy /Y "SomaliaNative.asi" "D:\sa-mpo\slash again\SomaliaNative.asi" >nul
-    )
-    cd ..
+    if not exist "%~dp0..\dist" mkdir "%~dp0..\dist"
+    copy /Y "SomaliaNative.asi" "%~dp0..\dist\SomaliaNative.asi" >nul
+    copy /Y "SomaliaNative.asi" "%~dp0..\SomaliaNative.asi" >nul
+    popd
     exit /b 0
 ) else (
     echo ========================================================
-    echo [FALHA] Erro durante a compilacao.
+    echo [FALHA] Erro durante a compilacao [%CONFIG%].
     echo ========================================================
-    cd ..
+    popd
     exit /b 1
 )

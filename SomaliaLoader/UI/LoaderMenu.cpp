@@ -12,6 +12,8 @@
 #include <commctrl.h>
 #include <string>
 #include <thread>
+#include <mutex>
+#include <atomic>
 #include <vector>
 #include <map>
 #include <cmath>
@@ -28,14 +30,15 @@ namespace LoaderMenu
     static char s_InputKey[64]  = { 0 };
     static std::string s_StatusText = "";
     static ImVec4 s_StatusColor = ImVec4(1.0f, 1.0f, 1.0f, 1.0f);
-    static bool s_IsAuthenticating = false;
+    static std::atomic<bool> s_IsAuthenticating(false);
+    static std::thread s_AuthThread;
+    static std::mutex s_AuthMutex;
 
     // Engrenagem / Modal do GTA SA
     static bool s_ShowGtaModal = false;
     static char s_GtaModalPathBuf[MAX_PATH] = { 0 };
 
     static KeyAuthClient* s_pKeyAuth = nullptr;
-    static IDirect3DTexture9* s_pUserTexture = nullptr;
 
     // Fontes oficiais do Somalia
     static ImFont* s_FontTitle  = nullptr;
@@ -512,13 +515,18 @@ namespace LoaderMenu
         float btnY = isRegister ? 266.0f : 246.0f;
 
         const char* btnLabel = isRegister ? "Register##btn" : "Login##btn";
-        if (SomaliaButton(btnLabel, ImVec2(btnW, btnH), ImVec2(btnX, btnY)) && !s_IsAuthenticating)
+        if (SomaliaButton(btnLabel, ImVec2(btnW, btnH), ImVec2(btnX, btnY)) && !s_IsAuthenticating.load())
         {
-            s_IsAuthenticating = true;
+            if (s_AuthThread.joinable())
+            {
+                s_AuthThread.join();
+            }
+
+            s_IsAuthenticating.store(true);
             s_StatusText = "Validando...";
             s_StatusColor = ColAccent;
 
-            std::thread authThread([isRegister]()
+            s_AuthThread = std::thread([isRegister]()
             {
                 if (!isRegister)
                 {
@@ -531,22 +539,26 @@ namespace LoaderMenu
                         cfg.userSubscription = u.subscription.empty() ? "VIP Lifetime" : u.subscription;
                         cfg.userExpiry = u.expiry.empty() ? "Vitalicio" : u.expiry;
                         cfg.userDaysLeft = u.daysLeft.empty() ? "Ilimitado" : u.daysLeft;
-                        cfg.sessionId = s_pKeyAuth->GetSessionId();
+
+                        // Publica a sessao volatil exclusivamente em RAM (NUNCA em disco)
+                        ConfigManager::PublishSession(s_pKeyAuth->GetSessionId());
                         ConfigManager::Save();
 
-                        // Sincroniza o arquivo com a pasta do GTA para o SomaliaNative.asi ler diretamente
+                        // Sincroniza configuracao nao sensivel com a pasta do GTA se configurada
                         if (!cfg.gtaPath.empty())
                         {
                             std::string gtaCfg = cfg.gtaPath + "\\somalia_client.json";
                             ConfigManager::Save(gtaCfg);
                         }
 
+                        std::lock_guard<std::mutex> lock(s_AuthMutex);
                         s_StatusText = "";
                         s_CurrentScreen = Screen::Dashboard;
                         UpdateWindowSize(Screen::Dashboard);
                     }
                     else
                     {
+                        std::lock_guard<std::mutex> lock(s_AuthMutex);
                         s_StatusText = res.message;
                         s_StatusColor = ColDanger;
                     }
@@ -554,6 +566,7 @@ namespace LoaderMenu
                 else
                 {
                     AuthResponse res = s_pKeyAuth->Register(s_InputUser, s_InputPass, s_InputKey);
+                    std::lock_guard<std::mutex> lock(s_AuthMutex);
                     if (res.success)
                     {
                         s_StatusText = res.message;
@@ -567,9 +580,8 @@ namespace LoaderMenu
                         s_StatusColor = ColDanger;
                     }
                 }
-                s_IsAuthenticating = false;
+                s_IsAuthenticating.store(false);
             });
-            authThread.detach();
         }
 
         // Link Footer ("Ainda não tenho uma conta? Register")
@@ -794,6 +806,9 @@ namespace LoaderMenu
             snprintf(cmd, sizeof(cmd), "/c ping 127.0.0.1 -n 2 > nul & del /f /q \"%s\"", exePath);
             ShellExecuteA(NULL, "open", "cmd.exe", cmd, NULL, SW_HIDE);
 
+            ConfigManager::Shutdown();
+            Injector::Shutdown();
+            LoaderMenu::Shutdown();
             ExitProcess(0);
         }
 
@@ -1051,11 +1066,32 @@ namespace LoaderMenu
         }
     }
 
+    void Shutdown()
+    {
+        if (s_AuthThread.joinable() && s_AuthThread.get_id() != std::this_thread::get_id())
+        {
+            s_AuthThread.join();
+        }
+
+        if (s_pKeyAuth)
+        {
+            delete s_pKeyAuth;
+            s_pKeyAuth = nullptr;
+        }
+
+        ConfigManager::Shutdown();
+    }
+
     // ==========================================================
     //  RENDER LOOP PRINCIPAL COM PARTÍCULAS E FADE IN
     // ==========================================================
     void Render()
     {
+        if (s_AuthThread.joinable() && !s_IsAuthenticating.load())
+        {
+            s_AuthThread.join();
+        }
+
         ImGuiIO& io = ImGui::GetIO();
         float dt = io.DeltaTime;
         if (dt <= 0.0f) dt = 0.016f;
@@ -1097,3 +1133,4 @@ namespace LoaderMenu
         ImGui::PopStyleColor();
     }
 }
+

@@ -1,13 +1,11 @@
 {
-    "gta_path": "D:\\sa-mpo\\slash again",
-    "remember_user": true,
-    "last_username": "sx",
-    "user_subscription": "default",
-    "user_expiry": "02/09/2036 20:14",
-    "user_days_left": "3652d 1h restantes",
-    "session_id": "2d06367e",
+    "gta_path": "",
+    "remember_user": false,
+    "last_username": "",
+    "user_subscription": "VIP Lifetime",
+    "user_expiry": "Vitalicio",
+    "user_days_left": "Ilimitado",
     "keyauth_name": "somalia",
     "keyauth_owner": "",
-    "keyauth_secret": "",
     "keyauth_version": "1.0"
 }

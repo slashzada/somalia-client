@@ -1,6 +1,7 @@
 #include "RuntimeState.h"
 #include "Logger.h"
 #include "Main.h"
+#include "../../Common/SafeMemory.h"
 #include "../Engine/GTA/GTA.h"
 #include "../Features/Aimbot/Aimbot.h"
 #include "../Features/Aimbot/AimAssist.h"
@@ -17,6 +18,7 @@ namespace RuntimeState
     static void* s_CurrentLocalPed = nullptr;
     static void* s_LastLocalPed = nullptr;
     static uint64_t s_LastStateChangeTick = 0;
+    static uint64_t s_NullPedStartTick = 0;
 
     void Initialize()
     {
@@ -25,9 +27,10 @@ namespace RuntimeState
         s_CurrentLocalPed = nullptr;
         s_LastLocalPed = nullptr;
         s_LastStateChangeTick = GetTickCount64();
+        s_NullPedStartTick = 0;
         ReleaseSRWLockExclusive(&s_StateLock);
 
-        Logger::Log("[SOMALIA][LIFECYCLE] RuntimeState inicializado.");
+        Logger::Log("[SOMALIA][LIFECYCLE] RuntimeState inicializado (GTA SA 1.0 US).");
     }
 
     PlayerLifeState GetState()
@@ -55,11 +58,12 @@ namespace RuntimeState
     bool IsValidPed(void* pPed)
     {
         if (!pPed) return false;
+        if (!SafeMemory::IsValidReadPtr(pPed, 0x550)) return false;
+
         __try
         {
-            if (IsBadReadPtr(pPed, 0x600)) return false;
             void* vtable = *reinterpret_cast<void**>(pPed);
-            if (!vtable || IsBadReadPtr(vtable, sizeof(void*))) return false;
+            if (!vtable || !SafeMemory::IsValidReadPtr(vtable, sizeof(void*) * 10)) return false;
             return true;
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
@@ -72,8 +76,8 @@ namespace RuntimeState
     {
         __try
         {
-            void** ppLocal = reinterpret_cast<void**>(0x00B7CD98);
-            if (!ppLocal || IsBadReadPtr(ppLocal, sizeof(void*))) return nullptr;
+            void** ppLocal = reinterpret_cast<void**>(GTASA_10US::ADDR_LOCAL_PLAYER_PED);
+            if (!ppLocal || !SafeMemory::IsValidReadPtr(ppLocal, sizeof(void*))) return nullptr;
             void* pPed = *ppLocal;
             if (!IsValidPed(pPed)) return nullptr;
             return pPed;
@@ -91,10 +95,10 @@ namespace RuntimeState
         __try
         {
             uintptr_t pedAddr = reinterpret_cast<uintptr_t>(pPed);
-            float hp = *reinterpret_cast<float*>(pedAddr + 0x540);
+            float hp = *reinterpret_cast<float*>(pedAddr + GTASA_10US::PED_OFF_HEALTH);
             if (hp <= 0.0f) return false;
 
-            uint32_t pedState = *reinterpret_cast<uint32_t*>(pedAddr + 0x530);
+            uint32_t pedState = *reinterpret_cast<uint32_t*>(pedAddr + GTASA_10US::PED_OFF_STATE);
             // 54 = PED_STATE_DEAD, 55 = PED_STATE_DIE
             if (pedState == 54 || pedState == 55) return false;
 
@@ -112,7 +116,6 @@ namespace RuntimeState
             return nullptr;
 
         AcquireSRWLockShared(&s_StateLock);
-        // Durante DEAD, RESPAWNING ou estados desconhecidos, ped DEVE ser nullptr
         if (s_State == PlayerLifeState::DEAD ||
             s_State == PlayerLifeState::RESPAWNING ||
             s_State == PlayerLifeState::UNKNOWN ||
@@ -179,7 +182,6 @@ namespace RuntimeState
 
     void OnPlayerRespawn()
     {
-        // UNLOAD DURANTE RESPAWN: Não permitir que OnPlayerRespawn reative módulos se shutdown estiver ativo
         if (Main::IsShuttingDown())
         {
             Logger::Log("[SOMALIA][LIFECYCLE] OnPlayerRespawn ignorado: shutdown em andamento.");
@@ -203,6 +205,7 @@ namespace RuntimeState
 
         void* rawPed = ReadRawLocalPed();
         bool rawAlive = CheckRawPedAlive(rawPed);
+        uint64_t now = GetTickCount64();
 
         AcquireSRWLockExclusive(&s_StateLock);
 
@@ -214,34 +217,52 @@ namespace RuntimeState
         {
             if (s_State == PlayerLifeState::UNKNOWN)
             {
-                // Jogo ainda inicializando / carregando interior ou spawn: permanece UNKNOWN
                 newState = PlayerLifeState::UNKNOWN;
                 newPedContext = nullptr;
+                s_NullPedStartTick = 0;
             }
             else if (s_State == PlayerLifeState::DEAD || s_State == PlayerLifeState::RESPAWNING)
             {
                 newState = PlayerLifeState::RESPAWNING;
                 newPedContext = nullptr;
+                s_NullPedStartTick = 0;
             }
             else if (s_State == PlayerLifeState::ALIVE || s_State == PlayerLifeState::ALIVE_AFTER_RESPAWN)
             {
-                // Ped removido pelo motor (morte instantânea ou transição de interior/spawn)
-                newState = PlayerLifeState::RESPAWNING;
-                newPedContext = nullptr;
+                // Debounce de ausencia temporaria do ped (interiores, streaming, cutscenes)
+                if (s_NullPedStartTick == 0)
+                {
+                    s_NullPedStartTick = now;
+                }
+
+                if (now - s_NullPedStartTick < 400)
+                {
+                    // Mantem estado ALIVE enquanto temporario, mas ponteiro nulo para evitar crashes
+                    newState = s_State;
+                    newPedContext = nullptr;
+                }
+                else
+                {
+                    // Ped ausente por tempo prolongado: transicao para RESPAWNING confirmada
+                    newState = PlayerLifeState::RESPAWNING;
+                    newPedContext = nullptr;
+                }
             }
             else
             {
                 newState = PlayerLifeState::DISCONNECTED;
                 newPedContext = nullptr;
+                s_NullPedStartTick = 0;
             }
         }
         else
         {
+            s_NullPedStartTick = 0;
+
             if (rawAlive)
             {
                 if (s_State == PlayerLifeState::DEAD || s_State == PlayerLifeState::RESPAWNING)
                 {
-                    // Respawn: novo ped detectado com HP > 0 e estado válido
                     newState = PlayerLifeState::ALIVE_AFTER_RESPAWN;
                     newPedContext = rawPed;
                 }
@@ -258,7 +279,7 @@ namespace RuntimeState
             }
             else
             {
-                // rawAlive é falso (morte do ped)
+                // rawAlive e falso: morte confirmada no proprio ped (HP <= 0 ou pedState 54/55)
                 if (s_State == PlayerLifeState::ALIVE || s_State == PlayerLifeState::ALIVE_AFTER_RESPAWN)
                 {
                     newState = PlayerLifeState::DEAD;
@@ -281,7 +302,7 @@ namespace RuntimeState
         {
             s_State = newState;
             s_CurrentLocalPed = newPedContext;
-            s_LastStateChangeTick = GetTickCount64();
+            s_LastStateChangeTick = now;
 
             if (newState == PlayerLifeState::DEAD)
             {
@@ -295,7 +316,6 @@ namespace RuntimeState
         }
         else
         {
-            // Se mantiver ALIVE ou ALIVE_AFTER_RESPAWN, garante sincronia do ped
             if (s_State == PlayerLifeState::ALIVE || s_State == PlayerLifeState::ALIVE_AFTER_RESPAWN)
             {
                 s_CurrentLocalPed = newPedContext;
@@ -310,13 +330,13 @@ namespace RuntimeState
 
         if (stateChanged)
         {
-            Logger::Log("[SOMALIA][LIFECYCLE] Transition: %s -> %s",
+            Logger::Log("[SOMALIA][LIFECYCLE] Transicao: %s -> %s",
                 GetStateName(oldState), GetStateName(newState));
 
             if (newState == PlayerLifeState::DEAD ||
                 ((oldState == PlayerLifeState::ALIVE || oldState == PlayerLifeState::ALIVE_AFTER_RESPAWN) && newState == PlayerLifeState::RESPAWNING))
             {
-                Logger::Log("[SOMALIA][LIFECYCLE] LocalPed invalidated");
+                Logger::Log("[SOMALIA][LIFECYCLE] LocalPed invalidado por morte/respawn.");
                 OnPlayerDeath();
             }
             else if (newState == PlayerLifeState::ALIVE_AFTER_RESPAWN ||

@@ -4,6 +4,7 @@
 #include "../../Engine/GTA/GTA.h"
 #include "../../Engine/SAMP/SAMP.h"
 #include "../../Core/RuntimeState.h"
+#include "../../../Common/SafeMemory.h"
 #include <math.h>
 #include <stdlib.h>
 
@@ -43,7 +44,7 @@ namespace AntiAim
                 {
                     uintptr_t pedAddr = reinterpret_cast<uintptr_t>(pLocalPed);
                     uintptr_t pMatrix = *reinterpret_cast<uintptr_t*>(pedAddr + 0x14);
-                    if (pMatrix && !IsBadWritePtr(reinterpret_cast<void*>(pMatrix), 0x40))
+                    if (pMatrix && SafeMemory::IsValidWritePtr(reinterpret_cast<void*>(pMatrix), 0x40))
                     {
                         *reinterpret_cast<float*>(pMatrix + 0x20) = 0.0f;
                         *reinterpret_cast<float*>(pMatrix + 0x24) = 0.0f;
@@ -51,10 +52,10 @@ namespace AntiAim
                     }
 
                     uintptr_t pClump = *reinterpret_cast<uintptr_t*>(pedAddr + 0x18);
-                    if (pClump && !IsBadReadPtr(reinterpret_cast<void*>(pClump), 8))
+                    if (pClump && SafeMemory::IsValidReadPtr(reinterpret_cast<void*>(pClump), 8))
                     {
                         uintptr_t pFrame = *reinterpret_cast<uintptr_t*>(pClump + 4);
-                        if (pFrame && !IsBadWritePtr(reinterpret_cast<void*>(pFrame + 0x10), 0x30))
+                        if (pFrame && SafeMemory::IsValidWritePtr(reinterpret_cast<void*>(pFrame + 0x10), 0x30))
                         {
                             float* pUp = reinterpret_cast<float*>(pFrame + 0x20);
                             pUp[0] = 0.0f;
@@ -126,7 +127,7 @@ namespace AntiAim
             if (s_WasInvertebredActive)
             {
                 uintptr_t pMatrix = *reinterpret_cast<uintptr_t*>(pedAddr + 0x14);
-                if (pMatrix && !IsBadWritePtr(reinterpret_cast<void*>(pMatrix), 0x40))
+                if (pMatrix && SafeMemory::IsValidWritePtr(reinterpret_cast<void*>(pMatrix), 0x40))
                 {
                     *reinterpret_cast<float*>(pMatrix + 0x20) = 0.0f;
                     *reinterpret_cast<float*>(pMatrix + 0x24) = 0.0f;
@@ -134,10 +135,10 @@ namespace AntiAim
                 }
 
                 uintptr_t pClump = *reinterpret_cast<uintptr_t*>(pedAddr + 0x18);
-                if (pClump && !IsBadReadPtr(reinterpret_cast<void*>(pClump), 8))
+                if (pClump && SafeMemory::IsValidReadPtr(reinterpret_cast<void*>(pClump), 8))
                 {
                     uintptr_t pFrame = *reinterpret_cast<uintptr_t*>(pClump + 4);
-                    if (pFrame && !IsBadWritePtr(reinterpret_cast<void*>(pFrame + 0x10), 0x30))
+                    if (pFrame && SafeMemory::IsValidWritePtr(reinterpret_cast<void*>(pFrame + 0x10), 0x30))
                     {
                         float* pUp = reinterpret_cast<float*>(pFrame + 0x20);
                         pUp[0] = 0.0f;
@@ -155,7 +156,7 @@ namespace AntiAim
         if (SAMP::IsLoaded())
         {
             uintptr_t pOnFootData = SAMP::GetLocalPlayerOnFootData();
-            if (pOnFootData && !IsBadWritePtr(reinterpret_cast<void*>(pOnFootData), 68))
+            if (pOnFootData && SafeMemory::IsValidWritePtr(reinterpret_cast<void*>(pOnFootData), 68))
             {
                 // Randomiza os 4 eixos do quaternion fQuaternion[0..3] (0.0f a 256.0f)
                 float* pQuat = reinterpret_cast<float*>(pOnFootData + 18);
@@ -177,17 +178,17 @@ namespace AntiAim
 
         // Jitter e rotação no heading local para visualização imediata em 3ª pessoa
         float* pHeading = reinterpret_cast<float*>(pedAddr + 0x558);
-        if (pHeading && !IsBadWritePtr(pHeading, sizeof(float)))
+        if (pHeading && SafeMemory::IsValidWritePtr(pHeading, sizeof(float)))
         {
             *pHeading += (sinf(s_InvertebredAngle) * 0.45f);
         }
 
         // Torção na matriz de RenderWare Clump (Frame Up vector)
         uintptr_t pClump = *reinterpret_cast<uintptr_t*>(pedAddr + 0x18);
-        if (pClump && !IsBadReadPtr(reinterpret_cast<void*>(pClump), 8))
+        if (pClump && SafeMemory::IsValidReadPtr(reinterpret_cast<void*>(pClump), 8))
         {
             uintptr_t pFrame = *reinterpret_cast<uintptr_t*>(pClump + 4);
-            if (pFrame && !IsBadWritePtr(reinterpret_cast<void*>(pFrame + 0x10), 0x30))
+            if (pFrame && SafeMemory::IsValidWritePtr(reinterpret_cast<void*>(pFrame + 0x10), 0x30))
             {
                 float* pUp = reinterpret_cast<float*>(pFrame + 0x20);
                 pUp[0] = sinf(s_InvertebredAngle) * 0.65f;
@@ -198,7 +199,7 @@ namespace AntiAim
 
         // Torção no Placeable Matrix
         uintptr_t pMatrix = *reinterpret_cast<uintptr_t*>(pedAddr + 0x14);
-        if (pMatrix && !IsBadWritePtr(reinterpret_cast<void*>(pMatrix), 0x40))
+        if (pMatrix && SafeMemory::IsValidWritePtr(reinterpret_cast<void*>(pMatrix), 0x40))
         {
             float* pUpX = reinterpret_cast<float*>(pMatrix + 0x20);
             float* pUpY = reinterpret_cast<float*>(pMatrix + 0x24);
@@ -373,7 +374,7 @@ namespace AntiAim
             {
                 // Aplica na variável de inclinação de mira nativa do GTA SA CPed (+0x5BC)
                 float* pAimZ = reinterpret_cast<float*>(pedAddr + 0x5BC);
-                if (pAimZ && !IsBadWritePtr(pAimZ, sizeof(float)))
+                if (pAimZ && SafeMemory::IsValidWritePtr(pAimZ, sizeof(float)))
                 {
                     *pAimZ = pitchAngle;
                 }
@@ -382,7 +383,7 @@ namespace AntiAim
                 if (SAMP::IsLoaded() && !g_MenuState.antiAim.invertebred)
                 {
                     uintptr_t pOnFoot = SAMP::GetLocalPlayerOnFootData();
-                    if (pOnFoot && !IsBadWritePtr(reinterpret_cast<void*>(pOnFoot), 68))
+                    if (pOnFoot && SafeMemory::IsValidWritePtr(reinterpret_cast<void*>(pOnFoot), 68))
                     {
                         float* pQuat = reinterpret_cast<float*>(pOnFoot + 18);
                         float halfPitch = pitchAngle * 0.5f;

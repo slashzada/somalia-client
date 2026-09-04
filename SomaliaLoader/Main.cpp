@@ -1,14 +1,35 @@
 #include <windows.h>
 #include <d3d9.h>
 #include <tchar.h>
+#include <cstdarg>
+#include <cstdio>
 #include "../SomaliaNative/Render/ImGui/imgui.h"
 #include "../SomaliaNative/Render/ImGui/imgui_impl_dx9.h"
 #include "../SomaliaNative/Render/ImGui/imgui_impl_win32.h"
 #include "UI/LoaderMenu.h"
+#include "Injector/Injector.h"
+#include "Config/LoaderConfig.h"
 
 #pragma comment(lib, "d3d9.lib")
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "advapi32.lib")
+
+#ifdef _DEBUG
+static void DebugLog(const char* fmt, ...)
+{
+    FILE* f = fopen("loader_debug.log", "a");
+    if (f)
+    {
+        va_list args;
+        va_start(args, fmt);
+        vfprintf(f, fmt, args);
+        va_end(args);
+        fclose(f);
+    }
+}
+#else
+static inline void DebugLog(const char*, ...) {}
+#endif
 
 // Símbolos globais requeridos pelo fork customizado de ImGui do Somalia
 float accent_colour[4] = { 137.f / 255.f, 207.f / 255.f, 240.f / 255.f, 1.0f };
@@ -25,13 +46,12 @@ static D3DPRESENT_PARAMETERS    g_d3dpp = {};
 
 bool CreateDeviceD3D(HWND hWnd)
 {
-    FILE* logF = fopen("loader_debug.log", "a");
     if ((g_pD3D = Direct3DCreate9(D3D_SDK_VERSION)) == NULL)
     {
-        if (logF) { fprintf(logF, "Direct3DCreate9 returned NULL!\n"); fclose(logF); }
+        DebugLog("Direct3DCreate9 returned NULL!\n");
         return false;
     }
-    if (logF) { fprintf(logF, "Direct3DCreate9 OK: %p\n", g_pD3D); }
+    DebugLog("Direct3DCreate9 OK: %p\n", g_pD3D);
 
     D3DFORMAT formats[] = { D3DFMT_A8R8G8B8, D3DFMT_UNKNOWN, D3DFMT_X8R8G8B8, D3DFMT_R5G6B5 };
     DWORD vpTypes[] = { D3DCREATE_HARDWARE_VERTEXPROCESSING, D3DCREATE_SOFTWARE_VERTEXPROCESSING, D3DCREATE_MIXED_VERTEXPROCESSING };
@@ -58,12 +78,12 @@ bool CreateDeviceD3D(HWND hWnd)
             HRESULT hr = g_pD3D->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hWnd, vp, &g_d3dpp, &g_pd3dDevice);
             if (SUCCEEDED(hr))
             {
-                if (logF) { fprintf(logF, "CreateDevice SUCCESS: fmt=%d, vp=0x%X, Device=%p\n", fmt, vp, g_pd3dDevice); fclose(logF); }
+                DebugLog("CreateDevice SUCCESS: fmt=%d, vp=0x%X, Device=%p\n", fmt, vp, g_pd3dDevice);
                 return true;
             }
             else
             {
-                if (logF) { fprintf(logF, "Attempt fmt=%d, vp=0x%X, w=%d, h=%d -> hr=0x%08X\n", fmt, vp, width, height, hr); fflush(logF); }
+                DebugLog("Attempt fmt=%d, vp=0x%X, w=%d, h=%d -> hr=0x%08X\n", fmt, vp, width, height, hr);
             }
         }
     }
@@ -80,11 +100,11 @@ bool CreateDeviceD3D(HWND hWnd)
     HRESULT hr = g_pD3D->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hWnd, D3DCREATE_SOFTWARE_VERTEXPROCESSING, &g_d3dpp, &g_pd3dDevice);
     if (SUCCEEDED(hr))
     {
-        if (logF) { fprintf(logF, "CreateDevice SUCCESS: SW VP zero-size, Device=%p\n", g_pd3dDevice); fclose(logF); }
+        DebugLog("CreateDevice SUCCESS: SW VP zero-size, Device=%p\n", g_pd3dDevice);
         return true;
     }
 
-    if (logF) { fprintf(logF, "All CreateDevice attempts failed! Zero-size hr=0x%08X\n", hr); fclose(logF); }
+    DebugLog("All CreateDevice attempts failed! Zero-size hr=0x%08X\n", hr);
     return false;
 }
 
@@ -119,7 +139,13 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             ResetDevice();
 
             HRGN hRgn = CreateRoundRectRgn(0, 0, LOWORD(lParam) + 1, HIWORD(lParam) + 1, 14, 14);
-            SetWindowRgn(hWnd, hRgn, TRUE);
+            if (hRgn)
+            {
+                if (!SetWindowRgn(hWnd, hRgn, TRUE))
+                {
+                    DeleteObject(hRgn);
+                }
+            }
         }
         return 0;
     case WM_SYSCOMMAND:
@@ -158,17 +184,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         NULL, NULL, wc.hInstance, NULL
     );
 
-    FILE* logF = fopen("loader_debug.log", "w");
-    if (logF)
-    {
-        fprintf(logF, "WinMain: hWnd = %p\n", hWnd);
-        fclose(logF);
-    }
+    DebugLog("WinMain: hWnd = %p\n", hWnd);
 
     if (!CreateDeviceD3D(hWnd))
     {
-        FILE* errF = fopen("loader_debug.log", "a");
-        if (errF) { fprintf(errF, "CreateDeviceD3D FAILED in WinMain!\n"); fclose(errF); }
+        DebugLog("CreateDeviceD3D FAILED in WinMain!\n");
         MessageBoxA(hWnd, "Falha ao inicializar DirectX 9.\nCertifique-se de que os drivers de video estao atualizados.", "Somalia Loader - Erro", MB_OK | MB_ICONERROR);
         CleanupDeviceD3D();
         UnregisterClass(wc.lpszClassName, wc.hInstance);
@@ -180,7 +200,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     // Cantos arredondados aplicados na janela Win32
     HRGN hRgn = CreateRoundRectRgn(0, 0, windowWidth + 1, windowHeight + 1, 14, 14);
-    SetWindowRgn(hWnd, hRgn, TRUE);
+    if (hRgn)
+    {
+        if (!SetWindowRgn(hWnd, hRgn, TRUE))
+        {
+            DeleteObject(hRgn);
+        }
+    }
 
     // Inicializa ImGui
     IMGUI_CHECKVERSION();
@@ -211,7 +237,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     style.Colors[ImGuiCol_FrameBgHovered]   = ImVec4(24.f / 255.f, 28.f / 255.f, 40.f / 255.f, 1.0f);
     style.Colors[ImGuiCol_FrameBgActive]    = ImVec4(30.f / 255.f, 36.f / 255.f, 52.f / 255.f, 1.0f);
 
-    // Registra fontes customizadas (titulo grande, etc)
+    // Registra fontes customizadas
     LoaderMenu::SetupFonts();
 
     ImGui_ImplWin32_Init(hWnd);
@@ -241,7 +267,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         // Renderiza interface
         LoaderMenu::Render();
 
-        // Movimentação da janela clicando em qualquer espaço vazio do fundo (após os itens da UI serem registrados)
+        // Movimentação da janela clicando em qualquer espaço vazio do fundo
         if (ImGui::IsMouseClicked(0) && !ImGui::IsAnyItemHovered() && !ImGui::IsAnyItemActive())
         {
             ReleaseCapture();
@@ -270,6 +296,11 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         // Limita a taxa de quadros para poupar CPU quando em repouso
         Sleep(10);
     }
+
+    // Shutdown ordenado e sincronizado de todos os subsistemas
+    LoaderMenu::Shutdown();
+    Injector::Shutdown();
+    ConfigManager::Shutdown();
 
     ImGui_ImplDX9_Shutdown();
     ImGui_ImplWin32_Shutdown();

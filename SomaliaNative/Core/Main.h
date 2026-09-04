@@ -36,7 +36,10 @@ namespace Main
 
         ~CallbackGuard()
         {
-            Main::LeaveCallback();
+            if (m_CanExecute)
+            {
+                Main::LeaveCallback();
+            }
         }
 
         CallbackGuard(const CallbackGuard&) = delete;

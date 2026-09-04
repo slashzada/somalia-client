@@ -16,6 +16,7 @@ namespace LoaderMenu
     void Init(HWND hWnd, IDirect3DDevice9* pDevice = nullptr);
     void SetupFonts();
     void Render();
+    void Shutdown();
     Screen GetCurrentScreen();
     void SetCurrentScreen(Screen s);
     void UpdateWindowSize(Screen s);

@@ -10,6 +10,7 @@ namespace Logger
     void Initialize()
     {
         AcquireSRWLockExclusive(&s_LogLock);
+#ifdef _DEBUG
         s_LogFile = fopen("somalia_debug.log", "w");
         OutputDebugStringA("[SOMALIA] Logger inicializado.\n");
         if (s_LogFile)
@@ -17,6 +18,7 @@ namespace Logger
             fputs("[SOMALIA] Logger inicializado.\n", s_LogFile);
             fflush(s_LogFile);
         }
+#endif
         ReleaseSRWLockExclusive(&s_LogLock);
     }
 
@@ -42,6 +44,7 @@ namespace Logger
 
         char outBuf[1100];
         snprintf(outBuf, sizeof(outBuf), "[SOMALIA] %s\n", buffer);
+#ifdef _DEBUG
         OutputDebugStringA(outBuf);
 
         AcquireSRWLockExclusive(&s_LogLock);
@@ -51,5 +54,6 @@ namespace Logger
             fflush(s_LogFile);
         }
         ReleaseSRWLockExclusive(&s_LogLock);
+#endif
     }
 }
