@@ -2,6 +2,7 @@
 #include "TargetSelector.h"
 #include "../../Core/Logger.h"
 #include "../../Core/RuntimeState.h"
+#include "../../Engine/GTA/GTA.h"
 #include <math.h>
 #include <stdio.h>
 
@@ -286,7 +287,7 @@ namespace RageBot
             Reset();
             return;
         }
-        ImVec2 screenCenter(displaySize.x * 0.5f, displaySize.y * 0.5f);
+        ImVec2 screenCenter = GTA::GetCrosshairScreenPos();
 
         WeaponAimConfig selectorConfig;
         selectorConfig.bone = profile.bone; // Padrão: 0 (HEAD -> Osso 8)
@@ -300,7 +301,7 @@ namespace RageBot
         int candidates = 0;
         int insideFovCount = 0;
 
-        TargetInfo newTarget = TargetSelector::FindBestTarget(selectorConfig, screenCenter, fovRadius, candidates, insideFovCount);
+        TargetInfo newTarget = TargetSelector::FindBestTarget(selectorConfig, screenCenter, fovRadius, candidates, insideFovCount, true);
 
         int newTargetId = newTarget.valid ? newTarget.playerId : -1;
         if (newTargetId != s_LastLoggedTargetId)
@@ -393,8 +394,17 @@ namespace RageBot
         if (aggr > 100.0f) aggr = 100.0f;
 
         float aggrFactor = aggr / 100.0f;
-        float outputX = deltaX * aggrFactor;
-        float outputY = deltaY * aggrFactor;
+        float sensRatio = 0.20f;
+        float outputX = deltaX * sensRatio * aggrFactor;
+        float outputY = deltaY * sensRatio * aggrFactor;
+
+        // Limite máximo de passo por quadro para estabilidade absoluta (previne arremesso fora de quadro)
+        float maxStep = 24.0f;
+        if (outputX > maxStep) outputX = maxStep;
+        else if (outputX < -maxStep) outputX = -maxStep;
+
+        if (outputY > maxStep) outputY = maxStep;
+        else if (outputY < -maxStep) outputY = -maxStep;
 
         if (aggr > 0.0f && outputX == 0.0f && outputY == 0.0f && (deltaX != 0.0f || deltaY != 0.0f))
         {
@@ -458,7 +468,7 @@ namespace RageBot
         if (displaySize.x <= 0 || displaySize.y <= 0)
             return;
 
-        ImVec2 screenCenter(displaySize.x * 0.5f, displaySize.y * 0.5f);
+        ImVec2 screenCenter = GTA::GetCrosshairScreenPos();
         ImDrawList* draw = ImGui::GetForegroundDrawList();
         if (!draw) return;
 

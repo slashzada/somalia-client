@@ -145,4 +145,56 @@ namespace GTA
     {
         return (pPed != nullptr) && (GetPedHealth(pPed) > 0.0f);
     }
+
+    bool GetCrosshairOffset(float& outX, float& outY)
+    {
+        __try
+        {
+            float* pCrossX = reinterpret_cast<float*>(0x00B6EC14);
+            float* pCrossY = reinterpret_cast<float*>(0x00B6EC10);
+            if (pCrossX && pCrossY)
+            {
+                float x = *pCrossX;
+                float y = *pCrossY;
+                if (x > 0.05f && x < 0.95f && y > 0.05f && y < 0.95f)
+                {
+                    outX = x;
+                    outY = y;
+                    return true;
+                }
+            }
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER) {}
+
+        outX = 0.5f;
+        outY = 0.5f;
+        return false;
+    }
+
+    ImVec2 GetCrosshairScreenPos()
+    {
+        ImVec2 displaySize = ImGui::GetIO().DisplaySize;
+        if (displaySize.x <= 0.0f || displaySize.y <= 0.0f)
+            return ImVec2(0.0f, 0.0f);
+
+        float ox = 0.5f, oy = 0.5f;
+        GetCrosshairOffset(ox, oy);
+        return ImVec2(displaySize.x * ox, displaySize.y * oy);
+    }
+
+    float GetMouseSensitivity()
+    {
+        __try
+        {
+            float* pSens = reinterpret_cast<float*>(0x00B6EC1C);
+            if (pSens && *pSens > 0.0001f && *pSens < 10.0f)
+            {
+                return *pSens;
+            }
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER) {}
+
+        return 0.0025f;
+    }
 }
+

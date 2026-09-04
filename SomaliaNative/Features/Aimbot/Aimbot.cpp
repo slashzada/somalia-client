@@ -5,6 +5,7 @@
 #include "../../Core/RuntimeState.h"
 #include "../../Render/ImGui/imgui.h"
 #include "../../Engine/SAMP/SAMP.h"
+#include "../../Engine/GTA/GTA.h"
 #include <stdio.h>
 
 namespace Aimbot
@@ -127,7 +128,7 @@ namespace Aimbot
             return;
         }
 
-        ImVec2 screenCenter(displaySize.x * 0.5f, displaySize.y * 0.5f);
+        ImVec2 screenCenter = GTA::GetCrosshairScreenPos();
 
         // Se o Aimbot e Silent Aim estiverem desligados globalmente, limpa o alvo
         if (!g_MenuState.aimbot.enabled && !g_MenuState.silentAim.enabled)
@@ -206,7 +207,7 @@ namespace Aimbot
         int candidates = 0;
         int insideFov = 0;
 
-        TargetInfo newTarget = TargetSelector::FindBestTarget(profile, screenCenter, fovRadius, candidates, insideFov);
+        TargetInfo newTarget = TargetSelector::FindBestTarget(profile, screenCenter, fovRadius, candidates, insideFov, false);
 
         // Registro de mudança de alvo somente quando houver alteração
         int newTargetId = newTarget.valid ? newTarget.playerId : -1;
@@ -250,7 +251,7 @@ namespace Aimbot
 
         ImVec2 displaySize = ImGui::GetIO().DisplaySize;
         if (displaySize.x <= 0 || displaySize.y <= 0) return;
-        ImVec2 screenCenter(displaySize.x * 0.5f, displaySize.y * 0.5f);
+        ImVec2 screenCenter = GTA::GetCrosshairScreenPos();
 
         // 3. Processa e Renderiza o Aim Assist (Cálculo suave e vetor de diagnóstico)
         AimAssist::Process(s_CurrentTarget, profile, screenCenter);

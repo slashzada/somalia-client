@@ -2,6 +2,8 @@
 #include <windows.h>
 #include <d3d9.h>
 
+#include "../../Render/ImGui/imgui.h"
+
 namespace GTA
 {
     // Obtenção segura e isolada do dispositivo Direct3D 9 do RenderWare (0x00C97C28)
@@ -20,4 +22,10 @@ namespace GTA
     float GetPedHealth(void* pPed);
     float GetPedArmor(void* pPed);
     bool IsPedAlive(void* pPed);
+
+    // Coordenadas reais da mira (Crosshair) na tela do GTA SA 1.0 US
+    bool GetCrosshairOffset(float& outX, float& outY);
+    ImVec2 GetCrosshairScreenPos();
+    float GetMouseSensitivity();
 }
+

@@ -9,7 +9,7 @@
 
 namespace TargetSelector
 {
-    TargetInfo FindBestTarget(const WeaponAimConfig& config, ImVec2 screenCenter, float fovRadius, int& outCandidates, int& outInsideFov)
+    TargetInfo FindBestTarget(const WeaponAimConfig& config, ImVec2 screenCenter, float fovRadius, int& outCandidates, int& outInsideFov, bool isRage)
     {
         TargetInfo bestTarget = {};
         bestTarget.valid = false;
@@ -30,9 +30,9 @@ namespace TargetSelector
 
         // Mapeamento dos ossos reais do GTA San Andreas 1.0 US
         int configuredBone = config.bone;
-        if (g_MenuState.legitBot.preferBodyAim && configuredBone == 0)
+        if (!isRage && g_MenuState.legitBot.preferBodyAim && configuredBone == 0)
         {
-            // Se preferBodyAim estiver ativo e a arma configurada para HEAD, prefere CHEST
+            // Se preferBodyAim estiver ativo no LegitBot e a arma configurada para HEAD, prefere CHEST
             configuredBone = 2;
         }
 
@@ -99,7 +99,7 @@ namespace TargetSelector
             int effectiveBoneId = targetBoneId;
             const char* effectiveBoneName = targetBoneName;
 
-            if (g_MenuState.legitBot.ignoreLimbs && player.pGtaPed)
+            if (!isRage && g_MenuState.legitBot.ignoreLimbs && player.pGtaPed)
             {
                 float* pVelX = reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(player.pGtaPed) + 0x44);
                 float* pVelY = reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(player.pGtaPed) + 0x48);

@@ -1,4 +1,4 @@
-﻿#pragma once
+#pragma once
 #include <windows.h>
 #include <stdint.h>
 #include "../../Render/ImGui/imgui.h"
@@ -22,5 +22,5 @@ struct TargetInfo
 
 namespace TargetSelector
 {
-    TargetInfo FindBestTarget(const WeaponAimConfig& config, ImVec2 screenCenter, float fovRadius, int& outCandidates, int& outInsideFov);
+    TargetInfo FindBestTarget(const WeaponAimConfig& config, ImVec2 screenCenter, float fovRadius, int& outCandidates, int& outInsideFov, bool isRage = false);
 }

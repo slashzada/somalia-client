@@ -409,7 +409,7 @@ namespace ESP
         ImVec2 displaySize = ImGui::GetIO().DisplaySize;
         if (displaySize.x <= 0 || displaySize.y <= 0) return;
 
-        ImVec2 screenCenter(displaySize.x * 0.5f, displaySize.y * 0.5f);
+        ImVec2 screenCenter = GTA::GetCrosshairScreenPos();
         ULONGLONG currentTick = GetTickCount64();
 
         // 1. Render FOV Circle
