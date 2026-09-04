@@ -2,6 +2,7 @@
 #include "../../Config/Config.h"
 #include "../../Core/Logger.h"
 #include "../../Core/RuntimeState.h"
+#include "../../Engine/SAMP/SAMP.h"
 #include <math.h>
 
 namespace LocalMods
@@ -13,6 +14,9 @@ namespace LocalMods
     static ULONGLONG s_LastCBugShotTick = 0;
     static bool s_CBugCrouched = false;
     static ULONGLONG s_CBugCrouchTick = 0;
+    static float s_OrigAccuracy[13] = { 0.0f };
+    static bool s_OrigAccuracySaved = false;
+    static bool s_wasNoSpreadActive = false;
 
     void Reset()
     {
@@ -40,6 +44,20 @@ namespace LocalMods
             {
                 keybd_event('C', 0, KEYEVENTF_KEYUP, 0);
                 s_CBugCrouched = false;
+            }
+
+            if (s_wasNoSpreadActive || s_OrigAccuracySaved)
+            {
+                for (int wId = 22; wId <= 34; wId++)
+                {
+                    uintptr_t pWepInfo = 0x00C8AAB8 + (wId * 0x70);
+                    float* pAccuracy = reinterpret_cast<float*>(pWepInfo + 0x20);
+                    if (pAccuracy)
+                    {
+                        *pAccuracy = s_OrigAccuracy[wId - 22];
+                    }
+                }
+                s_wasNoSpreadActive = false;
             }
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
@@ -164,34 +182,37 @@ namespace LocalMods
             if (g_MenuState.player.fastReload)
             {
                 uint8_t slot = *reinterpret_cast<uint8_t*>(pedAddr + 0x718);
-                uintptr_t weaponPtr = pedAddr + 0x5A0 + slot * 0x1C;
-                uint32_t weaponType = *reinterpret_cast<uint32_t*>(weaponPtr);
-
-                if (weaponType > 0)
+                if (slot < 13)
                 {
-                    uint32_t* pAmmoInClip = reinterpret_cast<uint32_t*>(weaponPtr + 0x8);
-                    uint32_t* pTotalAmmo = reinterpret_cast<uint32_t*>(weaponPtr + 0xC);
-                    uint32_t* pWeaponState = reinterpret_cast<uint32_t*>(weaponPtr + 0x10);
+                    uintptr_t weaponPtr = pedAddr + 0x5A0 + slot * 0x1C;
+                    uint32_t weaponType = *reinterpret_cast<uint32_t*>(weaponPtr);
 
-                    if ((*pWeaponState == 3 || *pAmmoInClip == 0) && *pTotalAmmo > 0)
+                    if (weaponType > 0)
                     {
-                        uint32_t clipCap = 30;
-                        if (weaponType == 24) clipCap = 7;       // Deagle
-                        else if (weaponType == 25) clipCap = 1;  // Shotgun
-                        else if (weaponType == 26) clipCap = 2;  // Sawnoff
-                        else if (weaponType == 27) clipCap = 7;  // Combat Shotgun
-                        else if (weaponType == 34) clipCap = 1;  // Sniper Rifle
-                        else if (weaponType == 29) clipCap = 30; // MP5
+                        uint32_t* pAmmoInClip = reinterpret_cast<uint32_t*>(weaponPtr + 0x8);
+                        uint32_t* pTotalAmmo = reinterpret_cast<uint32_t*>(weaponPtr + 0xC);
+                        uint32_t* pWeaponState = reinterpret_cast<uint32_t*>(weaponPtr + 0x10);
 
-                        uint32_t reloadAmount = (*pTotalAmmo < clipCap) ? *pTotalAmmo : clipCap;
-                        *pAmmoInClip = reloadAmount;
-                        *pWeaponState = 1; // Pronto para atirar
+                        if ((*pWeaponState == 3 || *pAmmoInClip == 0) && *pTotalAmmo > 0)
+                        {
+                            uint32_t clipCap = 30;
+                            if (weaponType == 24) clipCap = 7;       // Deagle
+                            else if (weaponType == 25) clipCap = 1;  // Shotgun
+                            else if (weaponType == 26) clipCap = 2;  // Sawnoff
+                            else if (weaponType == 27) clipCap = 7;  // Combat Shotgun
+                            else if (weaponType == 34) clipCap = 1;  // Sniper Rifle
+                            else if (weaponType == 29) clipCap = 30; // MP5
+
+                            uint32_t reloadAmount = (*pTotalAmmo < clipCap) ? *pTotalAmmo : clipCap;
+                            *pAmmoInClip = reloadAmount;
+                            *pWeaponState = 1; // Pronto para atirar
+                        }
                     }
                 }
             }
 
             // 2. AUTOMATIC C-BUG HELPER (Sequenciamento de cancelamento de animacao pos-disparo)
-            if (g_MenuState.player.autoCBug && !g_MenuState.menuOpen)
+            if (g_MenuState.player.autoCBug && !g_MenuState.menuOpen && !SAMP::HasActiveCursor())
             {
                 bool isAiming = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
                 bool isShooting = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
@@ -218,6 +239,20 @@ namespace LocalMods
             // 3. NO SPREAD (Trava dispersao conica e mantem precisao cirurgica nas armas)
             if (g_MenuState.player.noSpread)
             {
+                if (!s_OrigAccuracySaved)
+                {
+                    for (int wId = 22; wId <= 34; wId++)
+                    {
+                        uintptr_t pWepInfo = 0x00C8AAB8 + (wId * 0x70);
+                        float* pAccuracy = reinterpret_cast<float*>(pWepInfo + 0x20);
+                        if (pAccuracy)
+                        {
+                            s_OrigAccuracy[wId - 22] = *pAccuracy;
+                        }
+                    }
+                    s_OrigAccuracySaved = true;
+                }
+
                 for (int wId = 22; wId <= 34; wId++)
                 {
                     uintptr_t pWepInfo = 0x00C8AAB8 + (wId * 0x70);
@@ -227,6 +262,23 @@ namespace LocalMods
                         *pAccuracy = 1.0f; // Maxima precisao
                     }
                 }
+                s_wasNoSpreadActive = true;
+            }
+            else if (s_wasNoSpreadActive)
+            {
+                if (s_OrigAccuracySaved)
+                {
+                    for (int wId = 22; wId <= 34; wId++)
+                    {
+                        uintptr_t pWepInfo = 0x00C8AAB8 + (wId * 0x70);
+                        float* pAccuracy = reinterpret_cast<float*>(pWepInfo + 0x20);
+                        if (pAccuracy)
+                        {
+                            *pAccuracy = s_OrigAccuracy[wId - 22];
+                        }
+                    }
+                }
+                s_wasNoSpreadActive = false;
             }
         }
         __except (EXCEPTION_EXECUTE_HANDLER)

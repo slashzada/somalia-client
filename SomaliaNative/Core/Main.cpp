@@ -14,6 +14,7 @@
 #include "../Features/Aimbot/AimAssist.h"
 #include "../Features/Aimbot/Aimbot.h"
 #include "../Features/Aimbot/RageBot.h"
+#include "../Features/Visuals/ESP.h"
 
 static HMODULE s_hModule = NULL;
 static std::atomic<ShutdownState> s_ShutdownState(ShutdownState::Running);
@@ -260,6 +261,7 @@ static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam)
     AimAssist::Reset();
     Aimbot::ClearTarget();
     RageBot::Reset();
+    ESP::Reset();
     InputManager::Shutdown();
 
     // 12. Destruir UI (Menu, ImGui DX9, ImGui Win32, ImGui Context)

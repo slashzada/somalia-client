@@ -2,10 +2,34 @@
 #include <windows.h>
 #include <wininet.h>
 #include <sstream>
+#include <iomanip>
 #include <ctime>
 #include <cstdlib>
 
 #pragma comment(lib, "wininet.lib")
+
+std::string KeyAuthClient::UrlEncode(const std::string& value)
+{
+    std::ostringstream escaped;
+    escaped.fill('0');
+    escaped << std::hex;
+
+    for (char c : value)
+    {
+        if (isalnum(static_cast<unsigned char>(c)) || c == '-' || c == '_' || c == '.' || c == '~')
+        {
+            escaped << c;
+        }
+        else
+        {
+            escaped << std::uppercase;
+            escaped << '%' << std::setw(2) << int(static_cast<unsigned char>(c));
+            escaped << std::nouppercase;
+        }
+    }
+
+    return escaped.str();
+}
 
 KeyAuthClient::KeyAuthClient(const std::string& name, const std::string& ownerId, const std::string& secret, const std::string& version)
     : m_Name(name), m_OwnerId(ownerId), m_Secret(secret), m_Version(version), m_SessionId(""), m_Initialized(false)
@@ -38,6 +62,11 @@ std::string KeyAuthClient::HttpPost(const std::string& postData)
     std::string response;
     HINTERNET hInternet = InternetOpenA("SomaliaClient/1.0", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
     if (!hInternet) return "";
+
+    DWORD timeoutMs = 5000;
+    InternetSetOptionA(hInternet, INTERNET_OPTION_CONNECT_TIMEOUT, &timeoutMs, sizeof(timeoutMs));
+    InternetSetOptionA(hInternet, INTERNET_OPTION_SEND_TIMEOUT, &timeoutMs, sizeof(timeoutMs));
+    InternetSetOptionA(hInternet, INTERNET_OPTION_RECEIVE_TIMEOUT, &timeoutMs, sizeof(timeoutMs));
 
     HINTERNET hConnect = InternetConnectA(hInternet, "keyauth.win", INTERNET_DEFAULT_HTTPS_PORT, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
     if (!hConnect)
@@ -118,7 +147,7 @@ bool KeyAuthClient::Init()
         return false;
     }
 
-    std::string body = "type=init&name=" + m_Name + "&ownerid=" + m_OwnerId + "&secret=" + m_Secret + "&ver=" + m_Version;
+    std::string body = "type=init&name=" + UrlEncode(m_Name) + "&ownerid=" + UrlEncode(m_OwnerId) + "&secret=" + UrlEncode(m_Secret) + "&ver=" + UrlEncode(m_Version);
     std::string resp = HttpPost(body);
 
     if (resp.find("\"success\":true") != std::string::npos || resp.find("\"success\": true") != std::string::npos)
@@ -149,7 +178,10 @@ AuthResponse KeyAuthClient::Login(const std::string& username, const std::string
 
     if (!m_Initialized || m_SessionId.empty())
     {
-        return { false, "Autenticacao indisponivel. Verifique a configuracao do KeyAuth." };
+        if (!Init() || m_SessionId.empty())
+        {
+            return { false, "Autenticacao indisponivel. Verifique a conexao e configuracao do KeyAuth." };
+        }
     }
 
     if (m_SessionId == "dev_session")
@@ -161,8 +193,8 @@ AuthResponse KeyAuthClient::Login(const std::string& username, const std::string
         return { true, "Login realizado com sucesso! (Modo Dev)" };
     }
 
-    std::string body = "type=login&username=" + username + "&pass=" + password + "&hwid=" + m_User.hwid +
-                       "&sessionid=" + m_SessionId + "&name=" + m_Name + "&ownerid=" + m_OwnerId;
+    std::string body = "type=login&username=" + UrlEncode(username) + "&pass=" + UrlEncode(password) + "&hwid=" + UrlEncode(m_User.hwid) +
+                       "&sessionid=" + UrlEncode(m_SessionId) + "&name=" + UrlEncode(m_Name) + "&ownerid=" + UrlEncode(m_OwnerId);
     std::string resp = HttpPost(body);
 
     if (resp.find("\"success\":true") != std::string::npos || resp.find("\"success\": true") != std::string::npos)
@@ -230,7 +262,10 @@ AuthResponse KeyAuthClient::Register(const std::string& username, const std::str
 
     if (!m_Initialized || m_SessionId.empty())
     {
-        return { false, "Registro indisponivel. Verifique a configuracao do KeyAuth." };
+        if (!Init() || m_SessionId.empty())
+        {
+            return { false, "Registro indisponivel. Verifique a conexao e configuracao do KeyAuth." };
+        }
     }
 
     if (m_SessionId == "dev_session")
@@ -242,8 +277,8 @@ AuthResponse KeyAuthClient::Register(const std::string& username, const std::str
         return { true, "Conta registrada com sucesso! (Modo Dev)" };
     }
 
-    std::string body = "type=register&username=" + username + "&pass=" + password + "&key=" + key +
-                       "&hwid=" + m_User.hwid + "&sessionid=" + m_SessionId + "&name=" + m_Name + "&ownerid=" + m_OwnerId;
+    std::string body = "type=register&username=" + UrlEncode(username) + "&pass=" + UrlEncode(password) + "&key=" + UrlEncode(key) +
+                       "&hwid=" + UrlEncode(m_User.hwid) + "&sessionid=" + UrlEncode(m_SessionId) + "&name=" + UrlEncode(m_Name) + "&ownerid=" + UrlEncode(m_OwnerId);
     std::string resp = HttpPost(body);
 
     if (resp.find("\"success\":true") != std::string::npos || resp.find("\"success\": true") != std::string::npos)
@@ -261,8 +296,8 @@ bool KeyAuthClient::SetUserVar(const std::string& varName, const std::string& va
     if (m_SessionId.empty()) return false;
 
     // Escapa a data se necessário para x-www-form-urlencoded
-    std::string postData = "type=setvar&var=" + varName + "&data=" + varData +
-                           "&sessionid=" + m_SessionId + "&name=" + m_Name + "&ownerid=" + m_OwnerId;
+    std::string postData = "type=setvar&var=" + UrlEncode(varName) + "&data=" + UrlEncode(varData) +
+                           "&sessionid=" + UrlEncode(m_SessionId) + "&name=" + UrlEncode(m_Name) + "&ownerid=" + UrlEncode(m_OwnerId);
     std::string resp = HttpPost(postData);
     return (resp.find("\"success\":true") != std::string::npos || resp.find("\"success\": true") != std::string::npos);
 }
@@ -271,8 +306,8 @@ std::string KeyAuthClient::GetUserVar(const std::string& varName)
 {
     if (m_SessionId.empty()) return "";
 
-    std::string postData = "type=getvar&var=" + varName +
-                           "&sessionid=" + m_SessionId + "&name=" + m_Name + "&ownerid=" + m_OwnerId;
+    std::string postData = "type=getvar&var=" + UrlEncode(varName) +
+                           "&sessionid=" + UrlEncode(m_SessionId) + "&name=" + UrlEncode(m_Name) + "&ownerid=" + UrlEncode(m_OwnerId);
     std::string resp = HttpPost(postData);
 
     if (resp.find("\"success\":true") != std::string::npos || resp.find("\"success\": true") != std::string::npos)

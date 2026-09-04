@@ -56,6 +56,13 @@ namespace ESP
         }
     }
 
+    void Reset()
+    {
+        s_DamageEntries.clear();
+        s_HitmarkerTick = 0;
+        memset(s_PrevHealthArmor, 0, sizeof(s_PrevHealthArmor));
+    }
+
     bool WorldToScreen(float worldX, float worldY, float worldZ, ImVec2& outScreen)
     {
         __try

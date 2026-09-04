@@ -43,11 +43,24 @@ namespace AntiAim
                 {
                     uintptr_t pedAddr = reinterpret_cast<uintptr_t>(pLocalPed);
                     uintptr_t pMatrix = *reinterpret_cast<uintptr_t*>(pedAddr + 0x14);
-                    if (pMatrix)
+                    if (pMatrix && !IsBadWritePtr(reinterpret_cast<void*>(pMatrix), 0x40))
                     {
                         *reinterpret_cast<float*>(pMatrix + 0x20) = 0.0f;
                         *reinterpret_cast<float*>(pMatrix + 0x24) = 0.0f;
                         *reinterpret_cast<float*>(pMatrix + 0x28) = 1.0f;
+                    }
+
+                    uintptr_t pClump = *reinterpret_cast<uintptr_t*>(pedAddr + 0x18);
+                    if (pClump && !IsBadReadPtr(reinterpret_cast<void*>(pClump), 8))
+                    {
+                        uintptr_t pFrame = *reinterpret_cast<uintptr_t*>(pClump + 4);
+                        if (pFrame && !IsBadWritePtr(reinterpret_cast<void*>(pFrame + 0x10), 0x30))
+                        {
+                            float* pUp = reinterpret_cast<float*>(pFrame + 0x20);
+                            pUp[0] = 0.0f;
+                            pUp[1] = 0.0f;
+                            pUp[2] = 1.0f;
+                        }
                     }
                 }
             }
@@ -113,12 +126,26 @@ namespace AntiAim
             if (s_WasInvertebredActive)
             {
                 uintptr_t pMatrix = *reinterpret_cast<uintptr_t*>(pedAddr + 0x14);
-                if (pMatrix)
+                if (pMatrix && !IsBadWritePtr(reinterpret_cast<void*>(pMatrix), 0x40))
                 {
                     *reinterpret_cast<float*>(pMatrix + 0x20) = 0.0f;
                     *reinterpret_cast<float*>(pMatrix + 0x24) = 0.0f;
                     *reinterpret_cast<float*>(pMatrix + 0x28) = 1.0f;
                 }
+
+                uintptr_t pClump = *reinterpret_cast<uintptr_t*>(pedAddr + 0x18);
+                if (pClump && !IsBadReadPtr(reinterpret_cast<void*>(pClump), 8))
+                {
+                    uintptr_t pFrame = *reinterpret_cast<uintptr_t*>(pClump + 4);
+                    if (pFrame && !IsBadWritePtr(reinterpret_cast<void*>(pFrame + 0x10), 0x30))
+                    {
+                        float* pUp = reinterpret_cast<float*>(pFrame + 0x20);
+                        pUp[0] = 0.0f;
+                        pUp[1] = 0.0f;
+                        pUp[2] = 1.0f;
+                    }
+                }
+
                 s_WasInvertebredActive = false;
             }
             return;

@@ -37,6 +37,7 @@ public:
     static std::string GetHWID();
 
 private:
+    static std::string UrlEncode(const std::string& value);
     std::string HttpPost(const std::string& postData);
     std::string ParseJsonField(const std::string& json, const std::string& key);
 

@@ -16,4 +16,7 @@ namespace ESP
 
     // Adiciona evento numerico ao Damage Informer
     void AddDamageInformer(float worldX, float worldY, float worldZ, float damage);
+
+    // Limpa buffers visuais e historico de dano
+    void Reset();
 }

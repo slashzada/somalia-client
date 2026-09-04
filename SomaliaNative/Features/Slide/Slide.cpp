@@ -124,21 +124,24 @@ namespace Slide
                 {
                     // Obtém slot e ID da arma ativa atual no ped
                     uint8_t curSlot = *reinterpret_cast<uint8_t*>(pedAddr + 0x718);
-                    s_OriginalSlot = curSlot;
-                    uint32_t weaponId = *reinterpret_cast<uint32_t*>(pedAddr + 0x5A0 + curSlot * 0x1C);
+                    if (curSlot < 13)
+                    {
+                        s_OriginalSlot = curSlot;
+                        uint32_t weaponId = *reinterpret_cast<uint32_t*>(pedAddr + 0x5A0 + curSlot * 0x1C);
 
-                    int margin = 0;
-                    if (weaponId == 24)                          margin = g_MenuState.slide.marginDeagle;
-                    else if (weaponId >= 25 && weaponId <= 27)   margin = g_MenuState.slide.marginShotgun;
-                    else if (weaponId == 33 || weaponId == 34)   margin = g_MenuState.slide.marginSniper;
-                    else if (weaponId == 31)                     margin = g_MenuState.slide.marginM4;
-                    else if (weaponId == 30)                     margin = g_MenuState.slide.marginAK47;
+                        int margin = 0;
+                        if (weaponId == 24)                          margin = g_MenuState.slide.marginDeagle;
+                        else if (weaponId >= 25 && weaponId <= 27)   margin = g_MenuState.slide.marginShotgun;
+                        else if (weaponId == 33 || weaponId == 34)   margin = g_MenuState.slide.marginSniper;
+                        else if (weaponId == 31)                     margin = g_MenuState.slide.marginM4;
+                        else if (weaponId == 30)                     margin = g_MenuState.slide.marginAK47;
 
-                    int elapsed = static_cast<int>(currentTick - s_LastShotTick);
-                    int delayWait = (margin > elapsed) ? (margin - elapsed) : 0;
+                        int elapsed = static_cast<int>(currentTick - s_LastShotTick);
+                        int delayWait = (margin > elapsed) ? (margin - elapsed) : 0;
 
-                    s_TargetTick = currentTick + delayWait;
-                    s_State = SlideState::WAITING_MARGIN;
+                        s_TargetTick = currentTick + delayWait;
+                        s_State = SlideState::WAITING_MARGIN;
+                    }
                 }
             }
 
@@ -244,7 +247,7 @@ namespace Slide
                     }
 
                     // Restaura slot de arma original para que o jogador possa atirar novamente
-                    if (s_OriginalSlot > 0)
+                    if (s_OriginalSlot < 13)
                     {
                         *reinterpret_cast<uint8_t*>(pedAddr + 0x718) = s_OriginalSlot;
                     }

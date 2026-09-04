@@ -8,6 +8,7 @@
 #include "../Features/Slide/Slide.h"
 #include "../Features/AntiAim/AntiAim.h"
 #include "../Features/LocalMods/LocalMods.h"
+#include "../Features/Visuals/ESP.h"
 
 namespace RuntimeState
 {
@@ -173,6 +174,7 @@ namespace RuntimeState
         Slide::Reset();
         AntiAim::Reset();
         LocalMods::Reset();
+        ESP::Reset();
     }
 
     void OnPlayerRespawn()
@@ -190,6 +192,8 @@ namespace RuntimeState
         RageBot::Reset();
         Slide::Reset();
         AntiAim::Reset();
+        LocalMods::Reset();
+        ESP::Reset();
     }
 
     void Update()
