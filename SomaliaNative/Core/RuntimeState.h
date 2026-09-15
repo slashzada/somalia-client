@@ -27,7 +27,8 @@ namespace RuntimeState
     void* GetLocalPed();
     bool IsValidPed(void* pPed);
 
-    // Callbacks de transição
+    // Callbacks de transicao
     void OnPlayerDeath();
     void OnPlayerRespawn();
+
 }

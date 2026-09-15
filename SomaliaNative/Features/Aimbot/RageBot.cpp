@@ -2,6 +2,8 @@
 #include "TargetSelector.h"
 #include "../../Core/Logger.h"
 #include "../../Core/RuntimeState.h"
+#include "../../Engine/GTA/GTA.h"
+#include "../Visuals/ESP.h"
 #include <math.h>
 #include <stdio.h>
 
@@ -286,7 +288,7 @@ namespace RageBot
             Reset();
             return;
         }
-        ImVec2 screenCenter(displaySize.x * 0.5f, displaySize.y * 0.5f);
+        ImVec2 screenCenter = GTA::GetCrosshairScreenPos();
 
         WeaponAimConfig selectorConfig;
         selectorConfig.bone = profile.bone; // Padrão: 0 (HEAD -> Osso 8)
@@ -297,21 +299,57 @@ namespace RageBot
         selectorConfig.visibilityCheck = profile.visibilityCheck;
 
         float fovRadius = GetFovRadius(profile.fov);
+        static uint64_t s_LastRageSearchTick = 0;
         int candidates = 0;
         int insideFovCount = 0;
 
-        TargetInfo newTarget = TargetSelector::FindBestTarget(selectorConfig, screenCenter, fovRadius, candidates, insideFovCount);
-
-        int newTargetId = newTarget.valid ? newTarget.playerId : -1;
-        if (newTargetId != s_LastLoggedTargetId)
+        bool needFullSearch = (currentTick - s_LastRageSearchTick >= 16);
+        if (!s_RageTarget.valid || !s_RageTarget.ped || !GTA::IsPedAlive(s_RageTarget.ped))
         {
-            s_RageAccumulatedX = 0.0f;
-            s_RageAccumulatedY = 0.0f;
-            Logger::Log("[SOMALIA][RAGE] Target changed: old=%d new=%d", s_LastLoggedTargetId, newTargetId);
-            s_LastLoggedTargetId = newTargetId;
+            needFullSearch = true;
         }
 
-        s_RageTarget = newTarget;
+        // Se já temos um alvo válido, atualiza continuamente a posição de tela a cada quadro (600 FPS)
+        if (s_RageTarget.valid && s_RageTarget.ped && GTA::IsPedAlive(s_RageTarget.ped))
+        {
+            float bonePos[3] = { 0 };
+            if (GTA::GetPedBonePosition(s_RageTarget.ped, s_RageTarget.bone, bonePos) &&
+                ESP::WorldToScreen(bonePos[0], bonePos[1], bonePos[2], s_RageTarget.screenPosition))
+            {
+                s_RageTarget.worldPosition[0] = bonePos[0];
+                s_RageTarget.worldPosition[1] = bonePos[1];
+                s_RageTarget.worldPosition[2] = bonePos[2];
+                float dx = s_RageTarget.screenPosition.x - screenCenter.x;
+                float dy = s_RageTarget.screenPosition.y - screenCenter.y;
+                s_RageTarget.distanceFromCrosshair = sqrtf(dx * dx + dy * dy);
+
+                if (s_RageTarget.distanceFromCrosshair > fovRadius)
+                {
+                    needFullSearch = true;
+                }
+            }
+            else
+            {
+                needFullSearch = true;
+            }
+        }
+
+        if (needFullSearch)
+        {
+            s_LastRageSearchTick = currentTick;
+            TargetInfo newTarget = TargetSelector::FindBestTarget(selectorConfig, screenCenter, fovRadius, candidates, insideFovCount, true);
+
+            int newTargetId = newTarget.valid ? newTarget.playerId : -1;
+            if (newTargetId != s_LastLoggedTargetId)
+            {
+                s_RageAccumulatedX = 0.0f;
+                s_RageAccumulatedY = 0.0f;
+                Logger::Log("[SOMALIA][RAGE] Target changed: old=%d new=%d", s_LastLoggedTargetId, newTargetId);
+                s_LastLoggedTargetId = newTargetId;
+            }
+
+            s_RageTarget = newTarget;
+        }
 
         // ─────────────────────────────────────────────────────────────
         // ETAPA 5: Target Valid & FOV Valid
@@ -393,8 +431,17 @@ namespace RageBot
         if (aggr > 100.0f) aggr = 100.0f;
 
         float aggrFactor = aggr / 100.0f;
-        float outputX = deltaX * aggrFactor;
-        float outputY = deltaY * aggrFactor;
+        float sensRatio = 0.20f;
+        float outputX = deltaX * sensRatio * aggrFactor;
+        float outputY = deltaY * sensRatio * aggrFactor;
+
+        // Limite máximo de passo por quadro para estabilidade absoluta (previne arremesso fora de quadro)
+        float maxStep = 24.0f;
+        if (outputX > maxStep) outputX = maxStep;
+        else if (outputX < -maxStep) outputX = -maxStep;
+
+        if (outputY > maxStep) outputY = maxStep;
+        else if (outputY < -maxStep) outputY = -maxStep;
 
         if (aggr > 0.0f && outputX == 0.0f && outputY == 0.0f && (deltaX != 0.0f || deltaY != 0.0f))
         {
@@ -458,7 +505,7 @@ namespace RageBot
         if (displaySize.x <= 0 || displaySize.y <= 0)
             return;
 
-        ImVec2 screenCenter(displaySize.x * 0.5f, displaySize.y * 0.5f);
+        ImVec2 screenCenter = GTA::GetCrosshairScreenPos();
         ImDrawList* draw = ImGui::GetForegroundDrawList();
         if (!draw) return;
 

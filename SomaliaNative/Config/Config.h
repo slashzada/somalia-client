@@ -17,18 +17,31 @@ struct VisualsConfig
     bool bonesESP = false;
     bool enemyOnly = false;
     int maxDistance = 250; // Metros
+    bool weaponESP = false;
+    bool offscreenArrows = false;
+    bool targetHighlight = false;
+    bool lineOfSight = false;
 
     // World ESP (UI + Config)
     bool vehicleESP = false;
     bool pickupESP = false;
     bool objectESP = false;
+    int worldMaxDist = 300;
 
-    // Environment (UI + Config)
+    // Environment & Atmosphere (UI + Config)
     bool nightMode = false;
     bool weatherChanger = false;
     int weatherID = 0;
     bool timeChanger = false;
     int timeHour = 12;
+    bool lockHour = false;
+    bool noFog = false;
+    bool clearSky = false;
+    bool fullbright = false;
+    bool removeGrass = false;
+    bool removeRain = false;
+    bool clearWater = false;
+    bool extendedDrawDist = false;
 
     // Camera & Indicators (Runtime Integrado)
     bool drawFOVCircle = true;
@@ -36,6 +49,12 @@ struct VisualsConfig
     bool customCrosshair = false;
     bool hitmarker = false;
     bool damageInformer = false;
+    bool customCameraFOV = false;
+    float cameraFOV = 70.0f;
+    bool noCamShake = false;
+    bool hideRadar = false;
+    bool hideHUD = false;
+    bool showFPS = false;
 };
 
 // ─────────────────────────────────────────────────────────────
@@ -49,7 +68,7 @@ struct LegitWeaponConfig
     int bone = 0;                // 0: Head (8), 1: Neck (5), 2: Chest (4), 3: Pelvis (2)
     float maxDistance = 250.0f;  // Metros
     int priority = 0;            // 0: Closest to Crosshair, 1: Closest Distance 3D, 2: Lowest Health
-    bool teamCheck = false;
+    bool teamCheck = true;
     bool visibilityCheck = false;
     bool ignoreDead = true;
     bool drawTargetMarker = true;
@@ -70,13 +89,13 @@ struct LegitBotConfig
     LegitBotConfig()
     {
         // 0: Auto Snipers (Sniper, Country)
-        weapons[0] = { true, 35.0f, 4.0f, 0, 300.0f, 0, false, false, true, true, false, 1, true };
+        weapons[0] = { true, 35.0f, 4.0f, 0, 300.0f, 0, true, false, true, true, false, 1, true };
         // 1: Pistols (Desert Eagle)
-        weapons[1] = { true, 45.0f, 6.0f, 0, 180.0f, 0, false, false, true, true, false, 1, true };
+        weapons[1] = { true, 45.0f, 6.0f, 0, 180.0f, 0, true, false, true, true, false, 1, true };
         // 2: Rifles (M4, AK-47)
-        weapons[2] = { true, 50.0f, 7.0f, 2, 220.0f, 0, false, false, true, true, false, 1, true };
+        weapons[2] = { true, 50.0f, 7.0f, 2, 220.0f, 0, true, false, true, true, false, 1, true };
         // 3: Shotguns (Combat, Sawnoff)
-        weapons[3] = { true, 60.0f, 8.0f, 2, 120.0f, 0, false, false, true, true, false, 1, true };
+        weapons[3] = { true, 60.0f, 8.0f, 2, 120.0f, 0, true, false, true, true, false, 1, true };
     }
 
     // Compatibilidade com variáveis antigas e UI
@@ -90,7 +109,7 @@ struct LegitBotConfig
     int damageOverride = 56;
     int targetBone = 0; // 0: Head, 1: Chest, 2: Pelvis
     bool preferPoint = false;
-    bool preferBodyAim = true;
+    bool preferBodyAim = false;
     bool ignoreLimbs = true;
     bool autoStop = false;
     int stopMode = 0;
@@ -117,7 +136,7 @@ struct RageWeaponConfig
     float aggressiveness = 100.0f;// 0% a 100% (0%: min, 25%: baixo, 50%: medio, 75%: alto, 100%: maximo)
     float maxDistance = 300.0f;   // 10.0m a 500.0m
     bool ignoreDead = true;
-    bool teamCheck = false;
+    bool teamCheck = true;
     bool visibilityCheck = false;
     bool targetIndicator = true;
     bool drawFov = true;
@@ -133,13 +152,13 @@ struct RageBotConfig
     RageBotConfig()
     {
         // 0: Auto Snipers (Sniper, Country) -> HEAD padrão, 80% FOV, 100% agressividade
-        weapons[0] = { true, 0, 0, 0, 80.0f, 100.0f, 350.0f, true, false, false, true, true, true };
+        weapons[0] = { true, 0, 0, 0, 80.0f, 100.0f, 350.0f, true, true, false, true, true, true };
         // 1: Pistols (Desert Eagle) -> HEAD padrão, 85% FOV, 100% agressividade
-        weapons[1] = { true, 0, 0, 0, 85.0f, 100.0f, 250.0f, true, false, false, true, true, true };
+        weapons[1] = { true, 0, 0, 0, 85.0f, 100.0f, 250.0f, true, true, false, true, true, true };
         // 2: Rifles (M4, AK-47) -> HEAD padrão, 90% FOV, 100% agressividade
-        weapons[2] = { true, 0, 0, 0, 90.0f, 100.0f, 280.0f, true, false, false, true, true, true };
+        weapons[2] = { true, 0, 0, 0, 90.0f, 100.0f, 280.0f, true, true, false, true, true, true };
         // 3: Shotguns (Combat, Sawnoff) -> HEAD padrão, 95% FOV, 100% agressividade
-        weapons[3] = { true, 0, 0, 0, 95.0f, 100.0f, 150.0f, true, false, false, true, true, true };
+        weapons[3] = { true, 0, 0, 0, 95.0f, 100.0f, 150.0f, true, true, false, true, true, true };
     }
 };
 
@@ -156,7 +175,7 @@ struct SilentWeaponConfig
     int hitChance = 100;          // 1% a 100%
     float maxDistance = 280.0f;   // 10.0m a 500.0m
     bool ignoreDead = true;
-    bool teamCheck = false;
+    bool teamCheck = true;
     bool visibilityCheck = false;
     bool targetIndicator = true;
     bool drawFov = true;
@@ -168,18 +187,31 @@ struct SilentAimConfig
     bool enabled = false;
     int currentWeaponGroup = 0; // 0: Snipers, 1: Pistols, 2: Rifles, 3: Shotguns
     SilentWeaponConfig weapons[4];
+    bool skyBulletSync = true;    // Sky Bullet Sync: Em HS de Sniper > 70m, fOrigin vem do céu acima da cabeça do alvo
+    float skyHeight = 75.0f;      // Altura acima da cabeça do alvo (50m a 120m, padrão 75m)
 
     SilentAimConfig()
     {
         // 0: Auto Snipers (Sniper, Country) -> HEAD, 35% FOV, 100% HitChance
-        weapons[0] = { true, 2, 0, 0, 35.0f, 100, 350.0f, true, false, false, true, true, false };
+        weapons[0] = { true, 2, 0, 0, 35.0f, 100, 350.0f, true, true, false, true, true, false };
         // 1: Pistols (Desert Eagle) -> HEAD, 45% FOV, 95% HitChance
-        weapons[1] = { true, 2, 0, 0, 45.0f, 95, 220.0f, true, false, false, true, true, false };
+        weapons[1] = { true, 2, 0, 0, 45.0f, 95, 220.0f, true, true, false, true, true, false };
         // 2: Rifles (M4, AK-47) -> CHEST, 50% FOV, 90% HitChance
-        weapons[2] = { true, 2, 2, 0, 50.0f, 90, 250.0f, true, false, false, true, true, false };
+        weapons[2] = { true, 2, 2, 0, 50.0f, 90, 250.0f, true, true, false, true, true, false };
         // 3: Shotguns (Combat, Sawnoff) -> CHEST, 60% FOV, 85% HitChance
-        weapons[3] = { true, 2, 2, 0, 60.0f, 85, 140.0f, true, false, false, true, true, false };
+        weapons[3] = { true, 2, 2, 0, 60.0f, 85, 140.0f, true, true, false, true, true, false };
+        skyBulletSync = true;
+        skyHeight = 75.0f;
     }
+};
+
+// ─────────────────────────────────────────────────────────────
+// CONFIGURAÇÃO DO TRIGGERBOT (Minimalista: Enable + Reaction Delay)
+// ─────────────────────────────────────────────────────────────
+struct TriggerBotConfig
+{
+    bool enabled = false;
+    int reactionDelay = 0; // ms (0 a 200 ms)
 };
 
 struct AntiAimConfig
@@ -205,6 +237,10 @@ struct PlayerConfig
     bool fastReload = false;
     bool autoCBug = false;
     bool noSpread = false;
+    bool autoBhop = false;
+    bool fallProof = false;
+    bool antiHS = false;           // Anti-HS (Bone Spoof 100% invisivel)
+    float antiHSDamageCap = 46.2f; // Limite maximo de dano aceito
 };
 
 struct VehicleConfig
@@ -216,23 +252,56 @@ struct VehicleConfig
     bool flyCar = false;
     bool instantRepair = false;
     bool noBikeFall = false;
+    bool superBrake = false;
+    bool heavyVehicle = false;
+    bool driftMode = false;
+    bool unlimitedNitro = false;
 };
 
-struct SlideConfig
+
+
+struct KFCSlideConfig
 {
     bool enabled = false;
-    bool cSlideActive = true;
-    bool autoSlideActive = false;
-    int durationC = 15;       // ms (5 a 100)
-    int delayTroca = 10;      // ms (0 a 250)
-    float slideBoost = 1.8f;  // Multiplicador de impulso de velocidade (1.0x a 3.0x)
+    float speed = 4.0f;       // Velocidade regulavel (1.0x a 10.0x, padrao 4.0x)
+    int durationMs = 800;     // Janela fixa de 0.8 segundos pos-mira (800ms)
+};
 
-    // Margens por arma (ms)
-    int marginDeagle = 60;
-    int marginShotgun = 120;
-    int marginSniper = 150;
-    int marginM4 = 50;
-    int marginAK47 = 50;
+#pragma pack(push, 1)
+struct LuaSlideConfig
+{
+    uint32_t magic = 0x534F4D41; // Assinatura "SOMA" para autenticacao do script Lua
+    bool enabled = false;
+    uint8_t _pad[3] = {0, 0, 0};
+    int marginSniper = 550;
+    int marginDeagle = 0;
+    int marginShotgun = 0;
+    int marginM4 = 0;
+    int marginAK47 = 0;
+};
+#pragma pack(pop)
+
+struct FistSwitchConfig
+{
+    bool enabled = false;
+};
+
+struct AutoPunchConfig
+{
+    bool enabled = false;
+    int delayMs = 60;
+    int cooldownMs = 250;
+};
+
+struct PlayerSlapConfig
+{
+    bool enabled = false;
+    int mode = 0;              // 0: Ghost Car Ram, 1: Unoccupied Vehicle, 2: Ped Shove, 3: Multi-Vector Burst
+    float force = 4.0f;        // 1.0x a 10.0x
+    int manualTargetId = 0;    // 0 a 1004
+    int hotkey = 0;            // VK keycode (0 = none)
+    bool chatCommands = true;  // Intercepta /tapa, /slap, /derrubar
+    bool notifyOnExecute = true;
 };
 
 struct MiscConfig
@@ -241,6 +310,8 @@ struct MiscConfig
     bool particles = true;
     int themeColor = 0;
     char configName[32] = "Default.json";
+    bool streamProof = false;
+    float accentColor[4] = { 137.f / 255.f, 207.f / 255.f, 240.f / 255.f, 1.0f };
 };
 
 struct MenuState
@@ -249,15 +320,20 @@ struct MenuState
     int currentTab = 0;
     int currentAimbotPage = 0; // 0: LEGIT BOT, 1: RAGEBOT
 
-    VisualsConfig  visuals;
-    LegitBotConfig legitBot;
-    RageBotConfig  rageBot;
-    SilentAimConfig silentAim;
-    AntiAimConfig  antiAim;
-    PlayerConfig   player;
-    VehicleConfig  vehicle;
-    SlideConfig    slide;
-    MiscConfig     misc;
+    VisualsConfig    visuals;
+    LegitBotConfig   legitBot;
+    RageBotConfig    rageBot;
+    SilentAimConfig  silentAim;
+    TriggerBotConfig triggerBot;
+    AntiAimConfig    antiAim;
+    PlayerConfig     player;
+    VehicleConfig    vehicle;
+    KFCSlideConfig   kfcSlide;
+    LuaSlideConfig   luaSlide;
+    FistSwitchConfig fistSwitch;
+    AutoPunchConfig  autoPunch;
+    PlayerSlapConfig playerSlap;
+    MiscConfig       misc;
 
     // Backward compatibility aliases (LegitBot)
     LegitBotConfig& aimbot = legitBot;
@@ -291,10 +367,15 @@ struct MenuState
         , legitBot(other.legitBot)
         , rageBot(other.rageBot)
         , silentAim(other.silentAim)
+        , triggerBot(other.triggerBot)
         , antiAim(other.antiAim)
         , player(other.player)
         , vehicle(other.vehicle)
-        , slide(other.slide)
+        , kfcSlide(other.kfcSlide)
+        , luaSlide(other.luaSlide)
+        , fistSwitch(other.fistSwitch)
+        , autoPunch(other.autoPunch)
+        , playerSlap(other.playerSlap)
         , misc(other.misc)
     {
     }
@@ -310,10 +391,15 @@ struct MenuState
             legitBot = other.legitBot;
             rageBot = other.rageBot;
             silentAim = other.silentAim;
+            triggerBot = other.triggerBot;
             antiAim = other.antiAim;
             player = other.player;
             vehicle = other.vehicle;
-            slide = other.slide;
+            kfcSlide = other.kfcSlide;
+            luaSlide = other.luaSlide;
+            fistSwitch = other.fistSwitch;
+            autoPunch = other.autoPunch;
+            playerSlap = other.playerSlap;
             misc = other.misc;
         }
         return *this;
@@ -321,6 +407,7 @@ struct MenuState
 };
 
 extern MenuState g_MenuState;
+extern "C" __declspec(dllexport) void* __cdecl GetLuaSlideBridge();
 
 namespace Config
 {
@@ -333,4 +420,17 @@ namespace Config
     bool SaveToCloud(const std::string& configName, std::string& outMsg);
     bool LoadFromCloud(const std::string& configName, std::string& outMsg);
     void ResetToDefaults();
+
+    struct AccountInfo
+    {
+        std::string username = "Somalia";
+        std::string subscription = "VIP: Ilimitado";
+        std::string daysLeft = "";
+        std::string sessionId = "";
+        std::string keyauthName = "somalia";
+        std::string keyauthOwner = "5bU1fK1ki3";
+    };
+
+    AccountInfo GetAccountInfo();
+    std::string GetSessionId();
 }

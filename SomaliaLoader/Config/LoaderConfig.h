@@ -10,6 +10,7 @@ struct LoaderConfig
     std::string userExpiry = "Vitalicio";
     std::string userDaysLeft = "Ilimitado";
     std::string sessionId = "";
+    bool streamProof = false;
 
     // Credenciais KeyAuth configuráveis
     std::string keyauthName = "somalia";

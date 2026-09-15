@@ -117,18 +117,8 @@ local function getDefaultSettings()
             engineAlwaysOn = false,
             vehicleEsp = false
         },
-        -- Aba 5: Player & Movement (C-Slide original preservado)
+        -- Aba 5: Player & Movement
         player = {
-            scriptAtivo = true,
-            cSlideAtivo = true,
-            duracaoC = 10,            -- Duração do toque no C em ms
-            autoSlideAtivo = false,   -- Quick Switch (Soco e volta)
-            delayTroca = 0,
-            margem_snp = 550,
-            margem_desert = 0,
-            margem_m4 = 0,
-            margem_ak = 0,
-            margem_shot = 0,
             infiniteStamina = false,
             noFallDamage = false,
             sprintSpeed = 1.0

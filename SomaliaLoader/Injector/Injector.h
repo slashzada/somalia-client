@@ -14,4 +14,8 @@ namespace Injector
     void StopAutoInjectThread();
     bool IsAutoInjectWaiting();
     std::string GetStatusMessage();
+
+    // Extrai o payload embutido para %TEMP% caso nenhum arquivo local exista, ou retorna o caminho resolvido
+    std::string GetOrExtractPayload(std::string& outError);
+    void CleanupExtractedPayload();
 }

@@ -3,12 +3,11 @@
 #include "../../Core/Main.h"
 #include "../GTA/GTA.h"
 #include "../../Core/Logger.h"
-#include "../../Config/Config.h"
-#include "../../Features/Aimbot/Aimbot.h"
-#include "../../Features/Aimbot/AimAssist.h"
-#include "../../Features/Aimbot/TargetSelector.h"
+#include "../../Features/SilentAim/SilentAim.h"
 #include "../../Features/AntiAim/AntiAim.h"
+#include "../../Features/PlayerSlap/PlayerSlap.h"
 #include "../../Core/RuntimeState.h"
+#include "../../Config/Config.h"
 #include <stdio.h>
 #include <string.h>
 #include <math.h>
@@ -27,20 +26,32 @@ namespace SAMP
         uintptr_t remotePlayerOffset;
         uintptr_t isListedOffset;
         uintptr_t localPlayerIdOffset;
+        uintptr_t sendTakeDamageOffset;
+        uintptr_t sendGiveDamageOffset;
+        uintptr_t sendBulletDataOffset;
     };
 
     static Version s_Version = Version::Unknown;
     static VersionConfig s_Config = {};
     static bool s_Initialized = false;
 
+    typedef uint32_t (__stdcall *GetColorForPlayer_t)(int playerId);
+    static GetColorForPlayer_t s_fnGetColorForPlayer = nullptr;
+
+    static uintptr_t s_sampBase = 0;
+
     bool IsLoaded()
     {
-        return (GetModuleHandleA("samp.dll") != NULL);
+        if (!s_sampBase)
+            s_sampBase = reinterpret_cast<uintptr_t>(GetModuleHandleA("samp.dll"));
+        return (s_sampBase != 0);
     }
 
     uintptr_t GetBaseAddress()
     {
-        return reinterpret_cast<uintptr_t>(GetModuleHandleA("samp.dll"));
+        if (!s_sampBase)
+            s_sampBase = reinterpret_cast<uintptr_t>(GetModuleHandleA("samp.dll"));
+        return s_sampBase;
     }
 
     static void DetectVersion()
@@ -70,37 +81,37 @@ namespace SAMP
             if (entryPoint == 0x31DF13 || timeDateStamp == 0x554D0DE8)
             {
                 s_Version = Version::R1;
-                s_Config = { "0.3.7-R1", 0x21A0F8, 0x21A10C, 0x9BD30, 0x9BC10, 0x3CD, 0x18, 0x2E, 0xFDE, 0x4 };
+                s_Config = { "0.3.7-R1", 0x21A0F8, 0x21A10C, 0x9BD30, 0x9BC10, 0x3CD, 0x18, 0x2E, 0xFDE, 0x4, 0x6660, 0x6770, 0x6980 };
             }
             // 0.3.7-R2: EP 0x3195DD, TimeDateStamp 0x559D040A
             else if (entryPoint == 0x3195DD || timeDateStamp == 0x559D040A)
             {
                 s_Version = Version::R2;
-                s_Config = { "0.3.7-R2", 0x21A0F8, 0x21A10C, 0x9BD30, 0x9BC10, 0x3CD, 0x18, 0x2E, 0xFDE, 0x4 };
+                s_Config = { "0.3.7-R2", 0x21A0F8, 0x21A10C, 0x9BD30, 0x9BC10, 0x3CD, 0x18, 0x2E, 0xFDE, 0x4, 0x6660, 0x6770, 0x6980 };
             }
             // 0.3.7-R3: EP 0xCC4D0, TimeDateStamp 0x5C0B4243 / 0x5C0B3E7A
             else if (entryPoint == 0xCC4D0 || timeDateStamp == 0x5C0B4243 || timeDateStamp == 0x5C0B3E7A)
             {
                 s_Version = Version::R3;
-                s_Config = { "0.3.7-R3", 0x26E8DC, 0x26E8F4, 0x9FFE0, 0x9FEC0, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C };
+                s_Config = { "0.3.7-R3", 0x26E8DC, 0x26E8F4, 0x9FFE0, 0x9FEC0, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990 };
             }
             // 0.3.7-R4: EP 0xCBCB0, TimeDateStamp 0x5DE3DCB8
             else if (entryPoint == 0xCBCB0 || timeDateStamp == 0x5DE3DCB8)
             {
                 s_Version = Version::R4;
-                s_Config = { "0.3.7-R4", 0x26EA04, 0x26EA0C, 0xA0750, 0xA0630, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C };
+                s_Config = { "0.3.7-R4", 0x26EA04, 0x26EA0C, 0xA0750, 0xA0630, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990 };
             }
             // 0.3.7-R5: EP 0xCBC90, TimeDateStamp 0x6009E839
             else if (entryPoint == 0xCBC90 || timeDateStamp == 0x6009E839)
             {
                 s_Version = Version::R5;
-                s_Config = { "0.3.7-R5", 0x26EB94, 0x26EBAC, 0xA0890, 0xA0770, 0x3DE, 0x4, 0x4, 0xFB4, 0x2F1C };
+                s_Config = { "0.3.7-R5", 0x26EB94, 0x26EBAC, 0xA0890, 0xA0770, 0x3DE, 0x4, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990 };
             }
             // 0.3.DL-1: EP 0xCB180, TimeDateStamp 0x5A707993
             else if (entryPoint == 0xCB180 || timeDateStamp == 0x5A707993)
             {
                 s_Version = Version::DL;
-                s_Config = { "0.3.DL-1", 0x2ACA14, 0x2ACA24, 0xA0530, 0xA0410, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C };
+                s_Config = { "0.3.DL-1", 0x2ACA14, 0x2ACA24, 0xA0530, 0xA0410, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990 };
             }
             else
             {
@@ -114,36 +125,61 @@ namespace SAMP
                 if (pR1 && !IsBadReadPtr(pR1, 5) && pR1[0] == 0x55 && pR1[1] == 0x8B && pR1[2] == 0xEC && pR1[3] == 0x83 && pR1[4] == 0xEC)
                 {
                     s_Version = Version::R1;
-                    s_Config = { "0.3.7-R1 (Signature)", 0x21A0F8, 0x21A10C, 0x9BD30, 0x9BC10, 0x3CD, 0x18, 0x2E, 0xFDE, 0x4 };
+                    s_Config = { "0.3.7-R1 (Signature)", 0x21A0F8, 0x21A10C, 0x9BD30, 0x9BC10, 0x3CD, 0x18, 0x2E, 0xFDE, 0x4, 0x6660, 0x6770, 0x6980 };
                 }
                 else if (pR3 && !IsBadReadPtr(pR3, 5) && pR3[0] == 0x55 && pR3[1] == 0x8B && pR3[2] == 0xEC && pR3[3] == 0x83 && pR3[4] == 0xEC)
                 {
                     s_Version = Version::R3;
-                    s_Config = { "0.3.7-R3 (Signature)", 0x26E8DC, 0x26E8F4, 0x9FFE0, 0x9FEC0, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C };
+                    s_Config = { "0.3.7-R3 (Signature)", 0x26E8DC, 0x26E8F4, 0x9FFE0, 0x9FEC0, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990 };
                 }
                 else if (pR4 && !IsBadReadPtr(pR4, 5) && pR4[0] == 0x55 && pR4[1] == 0x8B && pR4[2] == 0xEC && pR4[3] == 0x83 && pR4[4] == 0xEC)
                 {
                     s_Version = Version::R4;
-                    s_Config = { "0.3.7-R4 (Signature)", 0x26EA04, 0x26EA0C, 0xA0750, 0xA0630, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C };
+                    s_Config = { "0.3.7-R4 (Signature)", 0x26EA04, 0x26EA0C, 0xA0750, 0xA0630, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990 };
                 }
                 else if (pR5 && !IsBadReadPtr(pR5, 5) && pR5[0] == 0x55 && pR5[1] == 0x8B && pR5[2] == 0xEC && pR5[3] == 0x83 && pR5[4] == 0xEC)
                 {
                     s_Version = Version::R5;
-                    s_Config = { "0.3.7-R5 (Signature)", 0x26EB94, 0x26EBAC, 0xA0890, 0xA0770, 0x3DE, 0x4, 0x4, 0xFB4, 0x2F1C };
+                    s_Config = { "0.3.7-R5 (Signature)", 0x26EB94, 0x26EBAC, 0xA0890, 0xA0770, 0x3DE, 0x4, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990 };
                 }
                 else if (pDL && !IsBadReadPtr(pDL, 5) && pDL[0] == 0x55 && pDL[1] == 0x8B && pDL[2] == 0xEC && pDL[3] == 0x83 && pDL[4] == 0xEC)
                 {
                     s_Version = Version::DL;
-                    s_Config = { "0.3.DL-1 (Signature)", 0x2ACA14, 0x2ACA24, 0xA0530, 0xA0410, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C };
+                    s_Config = { "0.3.DL-1 (Signature)", 0x2ACA14, 0x2ACA24, 0xA0530, 0xA0410, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990 };
                 }
                 else
                 {
                     // Versão não comprovada: NUNCA assumir R3 cegamente!
                     s_Version = Version::Unknown;
-                    s_Config = { "Unknown / Unsupported", 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+                    s_Config = { "Unknown / Unsupported", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
                     Logger::Log("[SAMP] AVISO CRITICO: Versao do SA-MP nao reconhecida (EP=0x%X, TimeStamp=0x%X). Acesso a estruturas do SAMP bloqueado.",
                         entryPoint, timeDateStamp);
                 }
+            }
+
+            // Localiza a funcao oficial de cor do jogador do SA-MP (GetColorForPlayer)
+            if (sampBase && pNt)
+            {
+                __try
+                {
+                    DWORD textBase = sampBase + pNt->OptionalHeader.BaseOfCode;
+                    DWORD textSize = pNt->OptionalHeader.SizeOfCode;
+                    const unsigned char* pCode = reinterpret_cast<const unsigned char*>(textBase);
+                    static const unsigned char pat[] = { 0x3D, 0xEC, 0x03, 0x00, 0x00, 0x75 };
+                    for (DWORD offset = 4; offset + sizeof(pat) <= textSize; ++offset)
+                    {
+                        if (memcmp(pCode + offset, pat, sizeof(pat)) == 0)
+                        {
+                            if (pCode[offset - 4] == 0x8B && pCode[offset - 3] == 0x44 && pCode[offset - 2] == 0x24 && pCode[offset - 1] == 0x04)
+                            {
+                                s_fnGetColorForPlayer = reinterpret_cast<GetColorForPlayer_t>(const_cast<unsigned char*>(pCode + offset - 4));
+                                Logger::Log("[SAMP] GetColorForPlayer located at 0x%p", s_fnGetColorForPlayer);
+                                break;
+                            }
+                        }
+                    }
+                }
+                __except (EXCEPTION_EXECUTE_HANDLER) {}
             }
 
             s_Initialized = true;
@@ -236,6 +272,25 @@ namespace SAMP
         }
     }
 
+    uintptr_t GetIsListedOffset()
+    {
+        return s_Config.isListedOffset;
+    }
+
+    int GetLargestPlayerId()
+    {
+        uintptr_t pPlayerPool = GetPlayerPool();
+        if (!pPlayerPool) return 0;
+        __try
+        {
+            int largest = *reinterpret_cast<int*>(pPlayerPool);
+            if (largest >= 0 && largest < 1004)
+                return largest;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER) {}
+        return 1003;
+    }
+
     uintptr_t GetLocalPlayer()
     {
         if (s_Version == Version::Unknown) return 0;
@@ -246,7 +301,7 @@ namespace SAMP
         if (!rawLocalPed)
         {
             void** ppGta = reinterpret_cast<void**>(0x00B7CD98);
-            if (ppGta && !IsBadReadPtr(ppGta, sizeof(void*)))
+            if (ppGta)
                 rawLocalPed = *ppGta;
         }
 
@@ -259,46 +314,27 @@ namespace SAMP
             else if (s_Version == Version::R3 || s_Version == Version::R4 || s_Version == Version::R5 || s_Version == Version::DL)
                 primaryOff = 0x2F1C;
 
-            // 1. Testa primeiro o offset primário
-            if (primaryOff != 0 && !IsBadReadPtr(reinterpret_cast<void*>(pPlayerPool + primaryOff), sizeof(void*)))
+            // 1. Testa primeiro o offset primário determinístico por versão
+            if (primaryOff != 0)
             {
                 uintptr_t pCandidate = *reinterpret_cast<uintptr_t*>(pPlayerPool + primaryOff);
-                if (pCandidate > 0x10000 && !IsBadReadPtr(reinterpret_cast<void*>(pCandidate), 64))
+                if (pCandidate >= 0x10000 && pCandidate <= 0x7FFE0000)
                 {
-                    if (rawLocalPed)
-                    {
-                        void* pInternalPed = *reinterpret_cast<void**>(pCandidate);
-                        if (pInternalPed == rawLocalPed)
-                            return pCandidate;
-                    }
-                    else
-                    {
-                        return pCandidate;
-                    }
+                    return pCandidate;
                 }
             }
 
-            // 2. Probing secundário validando estritamente com o ped nativo
-            if (rawLocalPed)
+            // 2. Probing secundário nos offsets de pools conhecidos do SA-MP
+            static const uintptr_t candidateOffsets[] = {
+                0x22, 0x2F1C, 0x2F38, 0x2F3C, 0x2F20, 0x20, 0x24, 0x18, 0x2E
+            };
+
+            for (uintptr_t off : candidateOffsets)
             {
-                static const uintptr_t candidateOffsets[] = {
-                    0x2F1C, 0x22, 0x2F38, 0x2F3C, 0x2F20, 0x20, 0x24, 0x18, 0x2E
-                };
-
-                for (uintptr_t off : candidateOffsets)
+                uintptr_t pCandidate = *reinterpret_cast<uintptr_t*>(pPlayerPool + off);
+                if (pCandidate >= 0x10000 && pCandidate <= 0x7FFE0000)
                 {
-                    if (IsBadReadPtr(reinterpret_cast<void*>(pPlayerPool + off), sizeof(void*)))
-                        continue;
-
-                    uintptr_t pCandidate = *reinterpret_cast<uintptr_t*>(pPlayerPool + off);
-                    if (pCandidate > 0x10000 && !IsBadReadPtr(reinterpret_cast<void*>(pCandidate), 64))
-                    {
-                        void* pInternalPed = *reinterpret_cast<void**>(pCandidate);
-                        if (pInternalPed == rawLocalPed)
-                        {
-                            return pCandidate;
-                        }
-                    }
+                    return pCandidate;
                 }
             }
         }
@@ -426,7 +462,7 @@ namespace SAMP
         return false;
     }
 
-    bool GetRemotePlayer(int index, RemotePlayerData& outData)
+    bool GetRemotePlayer(int index, RemotePlayerData& outData, uintptr_t pPlayerPool)
     {
         outData.playerId = index;
         outData.isValid = false;
@@ -442,7 +478,8 @@ namespace SAMP
         outData.color = 0;
         outData.team = -1;
 
-        uintptr_t pPlayerPool = GetPlayerPool();
+        if (!pPlayerPool)
+            pPlayerPool = GetPlayerPool();
         if (!pPlayerPool || index < 0 || index >= 1004)
             return false;
 
@@ -455,20 +492,27 @@ namespace SAMP
 
             // 2. Obtém ponteiro do RemotePlayer
             uintptr_t pRemotePlayer = *reinterpret_cast<uintptr_t*>(pPlayerPool + s_Config.remotePlayerOffset + index * 4);
-            if (!pRemotePlayer)
+            if (pRemotePlayer < 0x10000 || pRemotePlayer > 0x7FFE0000)
                 return false;
 
             outData.isValid = true;
 
             // 2.1 Lê cor e team do jogador remoto
-            if (!IsBadReadPtr(reinterpret_cast<void*>(pRemotePlayer + 0x28), sizeof(uint32_t)))
+            outData.color = GetPlayerColor(index);
+            if (outData.color == 0)
             {
-                outData.color = *reinterpret_cast<uint32_t*>(pRemotePlayer + 0x28);
+                uint32_t raw = *reinterpret_cast<uint32_t*>(pRemotePlayer + 0x28);
+                if (raw == 0)
+                    raw = *reinterpret_cast<uint32_t*>(pRemotePlayer + 0x24);
+                if (raw != 0)
+                {
+                    if ((raw & 0xFF000000) != 0)
+                        outData.color = raw | 0xFF000000;
+                    else
+                        outData.color = (raw >> 8) | 0xFF000000;
+                }
             }
-            if (!IsBadReadPtr(reinterpret_cast<void*>(pRemotePlayer + 0x8), sizeof(uint8_t)))
-            {
-                outData.team = static_cast<int>(*reinterpret_cast<uint8_t*>(pRemotePlayer + 0x8));
-            }
+            outData.team = static_cast<int>(*reinterpret_cast<uint8_t*>(pRemotePlayer + 0x8));
 
             // 3. Lê o Nome do Jogador
             const char* pName = reinterpret_cast<const char*>(pRemotePlayer + 0xC);
@@ -478,7 +522,7 @@ namespace SAMP
                 if (nameRes >= 16)
                 {
                     const char* pHeapName = *reinterpret_cast<const char**>(pRemotePlayer + 0xC);
-                    if (pHeapName && pHeapName[0] != '\0')
+                    if (pHeapName && pHeapName[0] != '\0' && uintptr_t(pHeapName) >= 0x10000 && uintptr_t(pHeapName) <= 0x7FFE0000)
                     {
                         strncpy(outData.name, pHeapName, sizeof(outData.name) - 1);
                     }
@@ -496,12 +540,12 @@ namespace SAMP
 
             // 4. Obtém pPlayerData (offset 0x0)
             uintptr_t pPlayerData = *reinterpret_cast<uintptr_t*>(pRemotePlayer + 0x0);
-            if (!pPlayerData)
+            if (pPlayerData < 0x10000 || pPlayerData > 0x7FFE0000)
                 return true;
 
             // 5. Obtém pSAMP_Actor (offset 0x0 de pPlayerData)
             uintptr_t pSAMP_Actor = *reinterpret_cast<uintptr_t*>(pPlayerData + 0x0);
-            if (!pSAMP_Actor)
+            if (pSAMP_Actor < 0x10000 || pSAMP_Actor > 0x7FFE0000)
                 return true;
 
             outData.isStreamed = true;
@@ -526,7 +570,7 @@ namespace SAMP
             outData.gtaPedHandle = handle;
             outData.pGtaPed = pGtaPed;
 
-            if (pGtaPed)
+            if (pGtaPed && uintptr_t(pGtaPed) >= 0x10000 && uintptr_t(pGtaPed) <= 0x7FFE0000)
             {
                 GTA::GetPedPosition(pGtaPed, outData.position);
                 outData.health = GTA::GetPedHealth(pGtaPed);
@@ -535,7 +579,7 @@ namespace SAMP
             else
             {
                 float* pPos = reinterpret_cast<float*>(pPlayerData + (s_Version == Version::R1 ? 0x7B : 0x58));
-                if (pPos)
+                if (pPos && uintptr_t(pPos) >= 0x10000 && uintptr_t(pPos) <= 0x7FFE0000)
                 {
                     outData.position[0] = pPos[0];
                     outData.position[1] = pPos[1];
@@ -568,21 +612,92 @@ namespace SAMP
         }
     }
 
+    uint32_t GetPlayerColor(int playerId)
+    {
+        if (playerId < 0 || playerId >= 1004) return 0;
+
+        __try
+        {
+            if (s_fnGetColorForPlayer)
+            {
+                uint32_t rgba = s_fnGetColorForPlayer(playerId);
+                if (rgba != 0)
+                {
+                    // Converte RGBA (0xRRGGBBAA) para ARGB (0xFFRRGGBB) exatamente como CRemotePlayer::GetPlayerColorAsARGB() do SA-MP
+                    return (rgba >> 8) | 0xFF000000;
+                }
+            }
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER) {}
+
+        // Fallback deterministico: le diretamente da tabela de cores em R1/R2
+        uintptr_t sampBase = GetBaseAddress();
+        if (sampBase && s_Config.infoOffset == 0x21A0F8)
+        {
+            __try
+            {
+                uint32_t* pTable = reinterpret_cast<uint32_t*>(sampBase + 0x216378);
+                if (pTable)
+                {
+                    uint32_t rgba = pTable[playerId];
+                    if (rgba != 0)
+                    {
+                        return (rgba >> 8) | 0xFF000000;
+                    }
+                }
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER) {}
+        }
+
+        return 0;
+    }
+
     uint32_t GetLocalPlayerColor()
     {
+        uint16_t localId = GetLocalPlayerId();
+        uint32_t col = GetPlayerColor(localId);
+        if (col != 0) return col;
+
         uintptr_t pPlayerPool = GetPlayerPool();
         if (!pPlayerPool) return 0;
 
         __try
         {
-            uintptr_t colorOff = (s_Version == Version::R1) ? 0x8 : 0x10;
-            if (!IsBadReadPtr(reinterpret_cast<void*>(pPlayerPool + colorOff), sizeof(uint32_t)))
+            if (s_Version == Version::R1 || s_Version == Version::R2)
             {
-                return *reinterpret_cast<uint32_t*>(pPlayerPool + colorOff);
+                uint32_t col = *reinterpret_cast<uint32_t*>(pPlayerPool + 0x8);
+                if (col != 0) return col;
+            }
+            else // R3, R4, R5, DL
+            {
+                // Offsets onde m_dwLocalPlayerColor reside em CPlayerPool (0.3.7-R3 / R4 / DL)
+                static const uintptr_t colorOffsets[] = { 0x2F44, 0x2F40, 0x2F3C, 0x2F48, 0x2F18, 0x2F20, 0x8 };
+                for (uintptr_t off : colorOffsets)
+                {
+                    uint32_t val = *reinterpret_cast<uint32_t*>(pPlayerPool + off);
+                    // Checa se parece com uma cor valida do SA-MP (ARGB com alpha 0xFF ou RGBA com alpha 0xFF)
+                    // e que nao seja um ponteiro de heap ou ID baixo
+                    if (val != 0 && val > 0x10000 && ((val & 0xFF000000) == 0xFF000000 || (val & 0x000000FF) == 0xFF))
+                    {
+                        return val;
+                    }
+                }
             }
         }
         __except (EXCEPTION_EXECUTE_HANDLER) {}
         return 0;
+    }
+
+    static inline uint32_t NormalizeColorRGB(uint32_t col)
+    {
+        if (col == 0) return 0;
+        // Se tiver canal alfa no byte superior (0xAARRGGBB - D3DCOLOR / SA-MP standard)
+        if ((col & 0xFF000000) != 0)
+        {
+            return (col & 0x00FFFFFF);
+        }
+        // Se tiver canal alfa no byte inferior (0xRRGGBBAA - Pawn standard)
+        return ((col >> 8) & 0x00FFFFFF);
     }
 
     bool IsTeammate(int index)
@@ -598,24 +713,47 @@ namespace SAMP
         if (!GetRemotePlayer(index, rp) || !rp.isValid)
             return false;
 
-        // Se o servidor definiu Team (diferente de 255 e -1)
+        // 1. Checagem por Team do Servidor (SetPlayerTeam)
         uint8_t localTeam = 255;
         uintptr_t pLocal = GetLocalPlayer();
-        if (pLocal && !IsBadReadPtr(reinterpret_cast<void*>(pLocal + 0x8), sizeof(uint8_t)))
+        if (pLocal && pLocal >= 0x10000 && pLocal <= 0x7FFE0000)
         {
             localTeam = *reinterpret_cast<uint8_t*>(pLocal + 0x8);
         }
 
         if (localTeam != 255 && rp.team != 255 && rp.team != -1)
         {
-            return (rp.team == static_cast<int>(localTeam));
+            if (rp.team == static_cast<int>(localTeam))
+                return true;
         }
 
-        // Se time não estiver configurado pelo servidor, confronta cor se não for nula/branca padrão
+        // 2. Checagem por Cor da Organizacao/Faccao (SetPlayerColor)
         uint32_t localColor = GetLocalPlayerColor();
-        if (localColor != 0 && rp.color != 0 && (rp.color & 0x00FFFFFF) == (localColor & 0x00FFFFFF))
+        uint32_t localRGB = NormalizeColorRGB(localColor);
+        uint32_t remoteRGB = NormalizeColorRGB(rp.color);
+
+        // Se a cor do player remoto nao estiver em rp.color, tenta ler m_dwMarkerColor (+0x24)
+        if (remoteRGB == 0)
         {
-            return true;
+            uintptr_t pPlayerPool = GetPlayerPool();
+            if (pPlayerPool)
+            {
+                uintptr_t pRemotePlayer = *reinterpret_cast<uintptr_t*>(pPlayerPool + s_Config.remotePlayerOffset + index * 4);
+                if (pRemotePlayer >= 0x10000 && pRemotePlayer <= 0x7FFE0000)
+                {
+                    uint32_t markerCol = *reinterpret_cast<uint32_t*>(pRemotePlayer + 0x24);
+                    remoteRGB = NormalizeColorRGB(markerCol);
+                }
+            }
+        }
+
+        // Se ambos tem cor de organizacao valida definida
+        if (localRGB != 0 && remoteRGB != 0)
+        {
+            if (localRGB == remoteRGB)
+            {
+                return true;
+            }
         }
 
         return false;
@@ -629,339 +767,36 @@ namespace SAMP
     static void** s_HookedVTable = nullptr;
     static uintptr_t s_HookedOffset = 0;
     static bool s_RakHookInstalled = false;
+    static void* s_pRakClient = nullptr;
 
-    static void MutateInvertebredPacket(unsigned char* data, int length)
+    void* GetRakClient()
     {
-        if (!data || length < 68) return;
-
-        // data[0] == 207 (0xCF) -> ID_PLAYER_SYNC (OnFoot Sync)
-        if (data[0] != 207) return;
-
-        // 1. Desincroniza Quaternion (fQuaternion[0..3]) nos bytes 19 a 34 (4 floats)
-        float* pQuat = reinterpret_cast<float*>(data + 19);
-        pQuat[0] = static_cast<float>(rand() % 256);
-        pQuat[1] = static_cast<float>(rand() % 256);
-        pQuat[2] = static_cast<float>(rand() % 256);
-        pQuat[3] = static_cast<float>(rand() % 256);
-
-        // 2. Desincroniza ID de animacao (byte 65) e flags (byte 67) exatamente como TwistPlayer.cs
-        static const uint16_t s_animIds[] = { 0x0B03, 0x0477, 0x045D, 0x0443, 0x0429 };
-        *reinterpret_cast<uint16_t*>(data + 65) = s_animIds[rand() % 5];
-        *reinterpret_cast<uint16_t*>(data + 67) = 12082; // Flag de animacao do Blume
+        return s_pRakClient;
     }
 
-    // ─────────────────────────────────────────────────────────────
-    // IMPLEMENTAÇÃO DO SILENT AIM COM INSTRUMENTAÇÃO DE DIAGNÓSTICO
-    // ─────────────────────────────────────────────────────────────
-
-    static int SilentResolveBoneIndex(int menuBoneOption)
+    bool SendRawPacket(const unsigned char* data, int length, int priority, int reliability, char orderingChannel)
     {
-        // menuBoneOption: 0=HEAD, 1=NECK, 2=CHEST, 3=PELVIS, 4=RANDOM
-        switch (menuBoneOption)
-        {
-        case 0: return 8;  // HEAD
-        case 1: return 5;  // NECK
-        case 2: return 4;  // CHEST
-        case 3: return 2;  // PELVIS
-        case 4:           // RANDOM (apenas Silent)
-        {
-            int bones[] = { 8, 5, 4, 2 };
-            return bones[rand() % 4];
-        }
-        default: return 8;
-        }
-    }
-
-    static const char* SilentBoneName(int boneId)
-    {
-        switch (boneId)
-        {
-        case 8: return "HEAD";
-        case 5: return "NECK";
-        case 4: return "CHEST";
-        case 2: return "PELVIS";
-        default: return "HEAD";
-        }
-    }
-
-    static bool SilentGetEyePosition(float outEye[3])
-    {
-        outEye[0] = 0.0f;
-        outEye[1] = 0.0f;
-        outEye[2] = 0.0f;
-
-        void* pLocalPed = *reinterpret_cast<void**>(0x00B7CD98);
-        if (!pLocalPed) return false;
+        if (!s_pRakClient || !s_OriginalSendData || !data || length <= 0)
+            return false;
 
         __try
         {
-            // Pega a posição da cabeça (osso 8) = origem dos olhos / arma
-            if (GTA::GetPedBonePosition(pLocalPed, 8, outEye))
-            {
-                return true;
-            }
-
-            // Fallback: posição do ped + offset de altura média
-            float pedPos[3] = { 0 };
-            if (GTA::GetPedPosition(pLocalPed, pedPos))
-            {
-                outEye[0] = pedPos[0];
-                outEye[1] = pedPos[1];
-                outEye[2] = pedPos[2] + 0.72f; // Altura média dos olhos em pé
-                return true;
-            }
+            return s_OriginalSendData(s_pRakClient, reinterpret_cast<const char*>(data), length, priority, reliability, orderingChannel);
         }
-        __except (EXCEPTION_EXECUTE_HANDLER) {}
-        return false;
-    }
-
-    struct SilentShotTarget
-    {
-        bool valid = false;
-        int playerId = -1;
-        float boneWorldPos[3] = { 0 };
-        float pedCenterPos[3] = { 0 };
-        int boneId = 8;
-        char boneName[16] = "HEAD";
-        char playerName[32] = "";
-    };
-
-    // Executado NO MOMENTO DO DISPARO com diagnóstico detalhado de cada ponto de saída
-    static SilentShotTarget SilentFindTargetOnShot()
-    {
-        SilentShotTarget result = {};
-
-        // ── Critério 1: Jogador vivo ──
-        if (!RuntimeState::IsPlayerAlive())
+        __except (EXCEPTION_EXECUTE_HANDLER)
         {
-            Logger::Log("[SILENT][DIAG][FAIL] Motivo: Jogador local morto ou ped invalido");
-            return result;
+            return false;
         }
-
-        // ── Critério 2: Silent master enable ──
-        if (!g_MenuState.silentAim.enabled)
-        {
-            Logger::Log("[SILENT][DIAG][FAIL] Motivo: g_MenuState.silentAim.enabled == false");
-            return result;
-        }
-
-        // ── Critério 3: Grupo de arma e perfil ──
-        int activeGroup = Aimbot::GetActiveWeaponGroup();
-        if (activeGroup < 0 || activeGroup >= 4) activeGroup = 0;
-        const auto& sw = g_MenuState.silentAim.weapons[activeGroup];
-        if (!sw.enabled)
-        {
-            Logger::Log("[SILENT][DIAG][FAIL] Motivo: Perfil de arma desativado (grupo=%d, armaID=%u)",
-                activeGroup, Aimbot::GetCurrentWeaponId());
-            return result;
-        }
-
-        // ── Critério 4: Modo de ativação (chaves no momento do disparo) ──
-        bool isAiming = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
-        bool isShooting = ((GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0) ||
-                          ((GetTickCount64() - AimAssist::GetLastLocalShotTick()) < 150);
-        bool activationOK = false;
-        switch (sw.activationMode)
-        {
-        case 0: activationOK = true; break;                              // Always
-        case 1: activationOK = isAiming; break;                          // While Aiming (RMB)
-        case 2: activationOK = isShooting; break;                        // While Shooting (LMB)
-        case 3: activationOK = (isAiming && isShooting); break;          // Aim + Shoot
-        default: activationOK = isShooting; break;
-        }
-        if (!activationOK)
-        {
-            Logger::Log("[SILENT][DIAG][FAIL] Motivo: Condicao de ativacao nao atendida (mode=%d, isAiming=%d, isShooting=%d)",
-                sw.activationMode, isAiming ? 1 : 0, isShooting ? 1 : 0);
-            return result;
-        }
-
-        // ── Critério 5: Hit Chance ──
-        if (sw.hitChance < 100)
-        {
-            int roll = rand() % 100;
-            if (roll >= sw.hitChance)
-            {
-                Logger::Log("[SILENT][DIAG][FAIL] Motivo: HitChance falhou (roll=%d >= config=%d)", roll, sw.hitChance);
-                return result;
-            }
-        }
-
-        // ── Critério 6: SAMP Carregado ──
-        if (!IsLoaded())
-        {
-            Logger::Log("[SILENT][DIAG][FAIL] Motivo: SAMP nao esta carregado");
-            return result;
-        }
-
-        float localEye[3] = { 0 };
-        SilentGetEyePosition(localEye);
-
-        ImVec2 displaySize = ImGui::GetIO().DisplaySize;
-        if (displaySize.x <= 0 || displaySize.y <= 0)
-        {
-            Logger::Log("[SILENT][DIAG][FAIL] Motivo: ImGui DisplaySize invalido (%.0f, %.0f)", displaySize.x, displaySize.y);
-            return result;
-        }
-        ImVec2 screenCenter(displaySize.x * 0.5f, displaySize.y * 0.5f);
-        float fovRadius = Aimbot::GetFovRadius(sw.fov);
-
-        // ── Bone ID no momento do disparo (resolve RANDOM também) ──
-        int realBoneId = SilentResolveBoneIndex(sw.bone);
-        const char* realBoneName = SilentBoneName(realBoneId);
-
-        // ── Target Selection FRESH (não usa cache do render loop) ──
-        WeaponAimConfig selectorCfg;
-        selectorCfg.bone = sw.bone;
-        selectorCfg.maxDistance = sw.maxDistance;
-        selectorCfg.priority = sw.priority;
-        selectorCfg.ignoreDead = sw.ignoreDead;
-        selectorCfg.teamCheck = sw.teamCheck;
-        selectorCfg.visibilityCheck = sw.visibilityCheck;
-        selectorCfg.fov = sw.fov;
-
-        int candidates = 0;
-        int insideFov = 0;
-        TargetInfo freshTarget = TargetSelector::FindBestTarget(selectorCfg, screenCenter, fovRadius, candidates, insideFov);
-
-        if (!freshTarget.valid || freshTarget.playerId < 0)
-        {
-            Logger::Log("[SILENT][DIAG][FAIL] Motivo: TargetSelector nao encontrou alvo (candidatos=%d, dentroFOV=%d, fovRaio=%.1f px, maxDist=%.1fm)",
-                candidates, insideFov, fovRadius, sw.maxDistance);
-            return result;
-        }
-
-        // ── Validação FINAL: jogador ainda existe na POOL no momento do tiro ──
-        RemotePlayerData rpData;
-        if (!GetRemotePlayer(freshTarget.playerId, rpData) || !rpData.isValid)
-        {
-            Logger::Log("[SILENT][DIAG][FAIL] Motivo: RemotePlayer #%d invalido na pool SAMP", freshTarget.playerId);
-            return result;
-        }
-
-        if (!rpData.isStreamed || !rpData.pGtaPed)
-        {
-            Logger::Log("[SILENT][DIAG][FAIL] Motivo: RemotePlayer #%d (%s) nao esta streamed ou ped nulo",
-                freshTarget.playerId, rpData.name);
-            return result;
-        }
-
-        if (!RuntimeState::IsValidPed(rpData.pGtaPed))
-        {
-            Logger::Log("[SILENT][DIAG][FAIL] Motivo: Ped do RemotePlayer #%d (%s) falhou em IsValidPed",
-                freshTarget.playerId, rpData.name);
-            return result;
-        }
-
-        if (sw.ignoreDead)
-        {
-            if (!GTA::IsPedAlive(rpData.pGtaPed) || rpData.health <= 0.0f)
-            {
-                Logger::Log("[SILENT][DIAG][FAIL] Motivo: RemotePlayer #%d (%s) esta morto (health=%.1f)",
-                    freshTarget.playerId, rpData.name, rpData.health);
-                return result;
-            }
-        }
-
-        // ── Re-obtém a posição 3D do OSSO EXATO agora ──
-        float finalBonePos[3] = { 0 };
-        bool gotBone = false;
-        __try
-        {
-            gotBone = GTA::GetPedBonePosition(rpData.pGtaPed, realBoneId, finalBonePos);
-        }
-        __except (EXCEPTION_EXECUTE_HANDLER) { gotBone = false; }
-
-        if (!gotBone)
-        {
-            finalBonePos[0] = rpData.position[0];
-            finalBonePos[1] = rpData.position[1];
-            float addZ = 0.2f;
-            if (realBoneId == 8) addZ = 0.82f;
-            else if (realBoneId == 5) addZ = 0.65f;
-            else if (realBoneId == 4) addZ = 0.35f;
-            finalBonePos[2] = rpData.position[2] + addZ;
-        }
-
-        // ── Preenche resultado válido ──
-        result.valid = true;
-        result.playerId = freshTarget.playerId;
-        result.boneId = realBoneId;
-        result.boneWorldPos[0] = finalBonePos[0];
-        result.boneWorldPos[1] = finalBonePos[1];
-        result.boneWorldPos[2] = finalBonePos[2];
-        result.pedCenterPos[0] = rpData.position[0];
-        result.pedCenterPos[1] = rpData.position[1];
-        result.pedCenterPos[2] = rpData.position[2];
-        strncpy(result.boneName, realBoneName, sizeof(result.boneName) - 1);
-        strncpy(result.playerName, rpData.name[0] ? rpData.name : "Player", sizeof(result.playerName) - 1);
-
-        Logger::Log("[SILENT][DIAG][SUCCESS] Alvo travado: ID #%d (%s) | Osso: %s | Pos3D: (%.1f, %.1f, %.1f)",
-            result.playerId, result.playerName, result.boneName,
-            result.boneWorldPos[0], result.boneWorldPos[1], result.boneWorldPos[2]);
-
-        return result;
-    }
-
-    static void MutateBulletSyncPacket(unsigned char* data, int length)
-    {
-        if (!data || length < 40)
-        {
-            Logger::Log("[SILENT][DIAG][MUTATE] MutateBulletSyncPacket abortado: data=%p length=%d (<40)", data, length);
-            return;
-        }
-        if (data[0] != 206)
-        {
-            Logger::Log("[SILENT][DIAG][MUTATE] MutateBulletSyncPacket abortado: data[0]=%u (!=206)", data[0]);
-            return;
-        }
-
-        Logger::Log("[SILENT][DIAG][MUTATE] MutateBulletSyncPacket iniciado (packetId=206, length=%d)", length);
-
-        // ── Validação e Seleção no momento do disparo ──
-        SilentShotTarget shot = SilentFindTargetOnShot();
-        if (!shot.valid)
-        {
-            Logger::Log("[SILENT][DIAG][MUTATE] SilentFindTargetOnShot retornou INVALIDO -> Disparo original mantido.");
-            return;
-        }
-
-        // ── Origem do tiro: posição dos olhos / arma do jogador LOCAL ──
-        float eyePos[3] = { 0 };
-        SilentGetEyePosition(eyePos);
-        *reinterpret_cast<float*>(data + 4)  = eyePos[0];  // fOrigin[0]
-        *reinterpret_cast<float*>(data + 8)  = eyePos[1];  // fOrigin[1]
-        *reinterpret_cast<float*>(data + 12) = eyePos[2];  // fOrigin[2]
-
-        // ── Tipo de hit: Player (1) ──
-        data[1] = 1; // byteType = BULLET_HIT_TYPE_PLAYER
-
-        // ── ID do jogador alvo ──
-        *reinterpret_cast<uint16_t*>(data + 2) = static_cast<uint16_t>(shot.playerId);
-
-        // ── fTarget[3]: coordenadas 3D do OSSO do alvo ──
-        *reinterpret_cast<float*>(data + 16) = shot.boneWorldPos[0];
-        *reinterpret_cast<float*>(data + 20) = shot.boneWorldPos[1];
-        *reinterpret_cast<float*>(data + 24) = shot.boneWorldPos[2];
-
-        // ── fCenter[3]: deslocamento RELATIVO do osso em relação ao centro do ped alvo ──
-        *reinterpret_cast<float*>(data + 28) = shot.boneWorldPos[0] - shot.pedCenterPos[0];
-        *reinterpret_cast<float*>(data + 32) = shot.boneWorldPos[1] - shot.pedCenterPos[1];
-        *reinterpret_cast<float*>(data + 36) = shot.boneWorldPos[2] - shot.pedCenterPos[2];
-
-        float dx = shot.boneWorldPos[0] - eyePos[0];
-        float dy = shot.boneWorldPos[1] - eyePos[1];
-        float dz = shot.boneWorldPos[2] - eyePos[2];
-        float dist3D = sqrtf(dx*dx + dy*dy + dz*dz);
-        Logger::Log("[SILENT][DIAG][REDIRECT] SHOT REDIRECTED -> target=%d (%s) bone=%s dist=%.1fm origin=(%.1f,%.1f,%.1f) targetBone=(%.1f,%.1f,%.1f)",
-            shot.playerId, shot.playerName, shot.boneName, dist3D,
-            eyePos[0], eyePos[1], eyePos[2],
-            shot.boneWorldPos[0], shot.boneWorldPos[1], shot.boneWorldPos[2]);
     }
 
     static bool __fastcall Hooked_SendBitStream(void* pThis, void* edx, void* pBitStream, int priority, int reliability, char orderingChannel)
     {
         Main::CallbackGuard guard;
+
+        if (pThis)
+        {
+            s_pRakClient = pThis;
+        }
 
         if (!s_OriginalSendBitStream)
         {
@@ -982,13 +817,26 @@ namespace SAMP
             {
                 unsigned char packetId = data[0];
 
+                // Interceptação de comandos do chat (/tapa, /slap, /derrubar)
+                if (g_MenuState.playerSlap.chatCommands && (packetId == 32 || packetId == 50 || packetId == 101))
+                {
+                    if (PlayerSlap::ProcessCommandPacket(data, byteCount))
+                    {
+                        return true; // Suprime envio para o servidor
+                    }
+                }
+
                 // Diagnóstico durante disparo (LMB pressionado) ou para pacotes de sync/combate
                 bool isShooting = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
                 if (packetId == 206)
                 {
                     Logger::Log("[SAMP][DIAG][NET] Hooked_SendBitStream: ID_BULLET_SYNC (206) interceptado! byteCount=%d (bits=%d)",
                         byteCount, numberOfBitsUsed);
-                    MutateBulletSyncPacket(data, byteCount);
+                    SilentAim::MutateBulletSyncPacket(data, byteCount);
+                }
+                else if (packetId == 32 && byteCount >= 14)
+                {
+                    AntiAim::ProcessDamageRPC(data, byteCount, numberOfBitsUsed);
                 }
                 else if (isShooting && (packetId == 207 || packetId == 211 || packetId == 212))
                 {
@@ -1004,10 +852,14 @@ namespace SAMP
 
                 if (packetId == 207 && byteCount >= 68)
                 {
-                    if (g_MenuState.antiAim.invertebred)
+                    static uint64_t s_last207Log = 0;
+                    uint64_t now = GetTickCount64();
+                    if (now - s_last207Log >= 3000)
                     {
-                        MutateInvertebredPacket(data, byteCount);
+                        Logger::Log("[SAMP][NET] Packet 207 interceptado com sucesso! byteCount=%d", byteCount);
+                        s_last207Log = now;
                     }
+                    AntiAim::MutateOnFootPacket(data, byteCount);
                 }
 
                 // Fake Lag: represa pacotes de sincronização de jogador (207) ou mira (203)
@@ -1024,6 +876,11 @@ namespace SAMP
     {
         Main::CallbackGuard guard;
 
+        if (pThis)
+        {
+            s_pRakClient = pThis;
+        }
+
         if (!s_OriginalSendData)
         {
             return false;
@@ -1038,13 +895,29 @@ namespace SAMP
         {
             unsigned char packetId = static_cast<unsigned char>(data[0]);
 
+            // Interceptação de comandos do chat (/tapa, /slap, /derrubar)
+            if (g_MenuState.playerSlap.chatCommands && (packetId == 32 || packetId == 50 || packetId == 101))
+            {
+                if (PlayerSlap::ProcessCommandPacket(reinterpret_cast<const unsigned char*>(data), length))
+                {
+                    return true; // Suprime envio para o servidor
+                }
+            }
+
             bool isShooting = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
             if (packetId == 206)
             {
                 Logger::Log("[SAMP][DIAG][NET] Hooked_SendData: ID_BULLET_SYNC (206) interceptado! length=%d", length);
                 if (!IsBadWritePtr(const_cast<char*>(data), length))
                 {
-                    MutateBulletSyncPacket(reinterpret_cast<unsigned char*>(const_cast<char*>(data)), length);
+                    SilentAim::MutateBulletSyncPacket(reinterpret_cast<unsigned char*>(const_cast<char*>(data)), length);
+                }
+            }
+            else if (packetId == 32 && length >= 14)
+            {
+                if (!IsBadWritePtr(const_cast<char*>(data), length))
+                {
+                    AntiAim::ProcessDamageRPC(reinterpret_cast<unsigned char*>(const_cast<char*>(data)), length, length * 8);
                 }
             }
             else if (isShooting && (packetId == 207 || packetId == 211 || packetId == 212))
@@ -1061,12 +934,9 @@ namespace SAMP
 
             if (packetId == 207 && length >= 68)
             {
-                if (g_MenuState.antiAim.invertebred)
+                if (!IsBadWritePtr(const_cast<char*>(data), length))
                 {
-                    if (!IsBadWritePtr(const_cast<char*>(data), length))
-                    {
-                        MutateInvertebredPacket(reinterpret_cast<unsigned char*>(const_cast<char*>(data)), length);
-                    }
+                    AntiAim::MutateOnFootPacket(reinterpret_cast<unsigned char*>(const_cast<char*>(data)), length);
                 }
             }
 
@@ -1079,9 +949,287 @@ namespace SAMP
         return s_OriginalSendData(pThis, data, length, priority, reliability, orderingChannel);
     }
 
+    static bool IsValidCodePointer(uintptr_t ptr)
+    {
+        if (ptr < 0x10000 || ptr > 0x7FFE0000)
+            return false;
+
+        MEMORY_BASIC_INFORMATION mbi = {};
+        if (VirtualQuery(reinterpret_cast<void*>(ptr), &mbi, sizeof(mbi)) == 0)
+            return false;
+
+        if (mbi.State != MEM_COMMIT)
+            return false;
+
+        DWORD prot = (mbi.Protect & 0xFF);
+        return (prot == PAGE_EXECUTE || prot == PAGE_EXECUTE_READ ||
+                prot == PAGE_EXECUTE_READWRITE || prot == PAGE_EXECUTE_WRITECOPY);
+    }
+
+    typedef void(__thiscall* SendTakeDamage_t)(void* pThis, int nId, float fDamage, int nWeapon, int nBodyPart);
+    static SendTakeDamage_t s_OriginalSendTakeDamage = nullptr;
+    static unsigned char s_TrampolineSendTakeDamage[32] = { 0 };
+    static unsigned char s_OriginalTakeDamageBytes[7] = { 0 };
+    static uintptr_t s_TakeDamageTarget = 0;
+    static bool s_TakeDamageHookInstalled = false;
+
+    static void __fastcall Hooked_SendTakeDamage(void* pThis, void* edx, int nId, float fDamage, int nWeapon, int nBodyPart)
+    {
+        Main::CallbackGuard guard;
+
+        if (!s_OriginalSendTakeDamage)
+        {
+            return;
+        }
+
+        if (!guard.IsActive())
+        {
+            s_OriginalSendTakeDamage(pThis, nId, fDamage, nWeapon, nBodyPart);
+            return;
+        }
+
+        if (g_MenuState.player.antiHS)
+        {
+            // 1. Interceptação de Headshot (Bone 9 -> Bone 3)
+            if (nBodyPart == 9)
+            {
+                nBodyPart = 3; // Converte Cabeça para Peito
+                if (fDamage > g_MenuState.player.antiHSDamageCap)
+                {
+                    fDamage = g_MenuState.player.antiHSDamageCap;
+                }
+                Logger::Log("[SAMP][ANTI-HS] SendTakeDamage interceptado! Bone 9 (Cabeca) -> 3 (Peito). Dano regulado=%.1f", fDamage);
+            }
+            else if (fDamage > g_MenuState.player.antiHSDamageCap)
+            {
+                fDamage = g_MenuState.player.antiHSDamageCap;
+            }
+
+            // 2. Protege imediatamente o Ped local contra morte repentina por HS
+            void* pLocalPed = RuntimeState::GetLocalPed();
+            if (!pLocalPed && pThis)
+            {
+                pLocalPed = *reinterpret_cast<void**>(pThis);
+            }
+
+            if (pLocalPed && !IsBadReadPtr(pLocalPed, 0x550))
+            {
+                uintptr_t pedAddr = reinterpret_cast<uintptr_t>(pLocalPed);
+                float* pHealth = reinterpret_cast<float*>(pedAddr + 0x540);
+                uint32_t* pPedState = reinterpret_cast<uint32_t*>(pedAddr + 0x530);
+
+                if (pHealth && !IsBadReadPtr(pHealth, sizeof(float)))
+                {
+                    if (*pHealth <= 0.0f || (pPedState && (*pPedState == 0x36 || *pPedState == 0x37)))
+                    {
+                        *pHealth = 15.0f;
+                        if (pPedState && (*pPedState == 0x36 || *pPedState == 0x37))
+                        {
+                            *pPedState = 1; // PED_STATE_IDLE
+                        }
+                        Logger::Log("[SAMP][ANTI-HS] Morte local impedida no SendTakeDamage! Vida restaurada para 15.0 HP");
+                    }
+                }
+            }
+        }
+
+        s_OriginalSendTakeDamage(pThis, nId, fDamage, nWeapon, nBodyPart);
+    }
+
+    bool EnsureSendTakeDamageHook()
+    {
+        if (Main::IsShuttingDown()) return false;
+        if (s_TakeDamageHookInstalled) return true;
+
+        uintptr_t sampBase = GetBaseAddress();
+        if (!sampBase || s_Config.sendTakeDamageOffset == 0) return false;
+
+        uintptr_t target = sampBase + s_Config.sendTakeDamageOffset;
+        if (IsBadReadPtr(reinterpret_cast<void*>(target), 7)) return false;
+
+        // Salva os 7 bytes originais
+        memcpy(s_OriginalTakeDamageBytes, reinterpret_cast<void*>(target), 7);
+        s_TakeDamageTarget = target;
+
+        // Prepara o trampoline com protecao PAGE_EXECUTE_READWRITE
+        DWORD oldProtect = 0;
+        if (!VirtualProtect(s_TrampolineSendTakeDamage, sizeof(s_TrampolineSendTakeDamage), PAGE_EXECUTE_READWRITE, &oldProtect))
+        {
+            return false;
+        }
+
+        // Copia os 7 bytes originais para o trampoline
+        memcpy(s_TrampolineSendTakeDamage, reinterpret_cast<void*>(target), 7);
+
+        // Adiciona JMP de volta para target + 7
+        s_TrampolineSendTakeDamage[7] = 0xE9;
+        uintptr_t trampJumpFrom = reinterpret_cast<uintptr_t>(&s_TrampolineSendTakeDamage[7]);
+        uintptr_t trampJumpTo = target + 7;
+        *reinterpret_cast<int32_t*>(&s_TrampolineSendTakeDamage[8]) = static_cast<int32_t>(trampJumpTo - (trampJumpFrom + 5));
+        s_OriginalSendTakeDamage = reinterpret_cast<SendTakeDamage_t>(static_cast<void*>(s_TrampolineSendTakeDamage));
+
+        // Instala o detour hook no target (E9 <rel32> 90 90)
+        DWORD targetOldProtect = 0;
+        if (VirtualProtect(reinterpret_cast<void*>(target), 7, PAGE_EXECUTE_READWRITE, &targetOldProtect))
+        {
+            unsigned char* pTargetBytes = reinterpret_cast<unsigned char*>(target);
+            pTargetBytes[0] = 0xE9;
+            uintptr_t hookAddr = reinterpret_cast<uintptr_t>(&Hooked_SendTakeDamage);
+            *reinterpret_cast<int32_t*>(&pTargetBytes[1]) = static_cast<int32_t>(hookAddr - (target + 5));
+            pTargetBytes[5] = 0x90; // NOP
+            pTargetBytes[6] = 0x90; // NOP
+
+            VirtualProtect(reinterpret_cast<void*>(target), 7, targetOldProtect, &targetOldProtect);
+            FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(target), 7);
+
+            s_TakeDamageHookInstalled = true;
+            Logger::Log("[SAMP][HOOK] CLocalPlayer::SendTakeDamage detour hook instalado com sucesso em 0x%p (offset 0x%X)",
+                reinterpret_cast<void*>(target), s_Config.sendTakeDamageOffset);
+            return true;
+        }
+
+        return false;
+    }
+
+    bool IsSendTakeDamageHooked()
+    {
+        return s_TakeDamageHookInstalled;
+    }
+
+    void RestoreSendTakeDamageHook()
+    {
+        if (!s_TakeDamageHookInstalled || !s_TakeDamageTarget) return;
+
+        DWORD oldProtect = 0;
+        if (VirtualProtect(reinterpret_cast<void*>(s_TakeDamageTarget), 7, PAGE_EXECUTE_READWRITE, &oldProtect))
+        {
+            memcpy(reinterpret_cast<void*>(s_TakeDamageTarget), s_OriginalTakeDamageBytes, 7);
+            VirtualProtect(reinterpret_cast<void*>(s_TakeDamageTarget), 7, oldProtect, &oldProtect);
+            FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(s_TakeDamageTarget), 7);
+            Logger::Log("[SAMP][UNHOOK] CLocalPlayer::SendTakeDamage detour hook restaurado com sucesso.");
+        }
+        s_TakeDamageHookInstalled = false;
+        s_TakeDamageTarget = 0;
+        s_OriginalSendTakeDamage = nullptr;
+    }
+
+    void SendGiveDamage(int targetId, float damage, int weaponId, int bodyPart)
+    {
+        if (targetId < 0 || targetId >= 1004) return;
+        DetectVersion();
+        uintptr_t sampBase = GetBaseAddress();
+        if (!sampBase || s_Config.sendGiveDamageOffset == 0) return;
+
+        uintptr_t pLocal = GetLocalPlayer();
+        if (!pLocal) return;
+
+        __try
+        {
+            typedef void(__thiscall* SendGiveDamage_t)(void* pThis, int nId, float fDamage, int nWeapon, int nBodyPart);
+            auto fnSendGive = reinterpret_cast<SendGiveDamage_t>(sampBase + s_Config.sendGiveDamageOffset);
+            if (fnSendGive && !IsBadReadPtr(reinterpret_cast<void*>(fnSendGive), 4))
+            {
+                fnSendGive(reinterpret_cast<void*>(pLocal), targetId, damage, weaponId, bodyPart);
+                Logger::Log("[SAMP][GIVE_DAMAGE] SendGiveDamage transmitido: alvo=#%d dano=%.2f arma=%d osso=%d",
+                    targetId, damage, weaponId, bodyPart);
+            }
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            Logger::Log("[SAMP][GIVE_DAMAGE] Excecao em SendGiveDamage");
+        }
+    }
+
+#pragma pack(push, 1)
+    struct stBulletSyncPacket
+    {
+        uint8_t packetId;       // 206 (ID_BULLET_SYNC)
+        uint8_t byteType;       // 1 = BULLET_HIT_TYPE_PLAYER
+        uint16_t sTargetID;     // target player ID
+        float fOrigin[3];       // origin (X, Y, Z)
+        float fTarget[3];       // target (X, Y, Z)
+        float fCenter[3];       // center offset relative to ped
+        uint8_t byteWeaponID;   // weapon ID
+    };
+#pragma pack(pop)
+    static_assert(sizeof(stBulletSyncPacket) == 41, "stBulletSyncPacket must be 41 bytes");
+
+    bool SendBulletData(uint16_t targetId, const float origin[3], const float target[3], const float center[3], uint8_t weaponId, uint8_t hitType)
+    {
+        if (targetId >= 1004) return false;
+        DetectVersion();
+
+        stBulletSyncPacket pkt = {};
+        pkt.packetId = 206;
+        pkt.byteType = hitType;
+        pkt.sTargetID = targetId;
+        if (origin)
+        {
+            pkt.fOrigin[0] = origin[0];
+            pkt.fOrigin[1] = origin[1];
+            pkt.fOrigin[2] = origin[2];
+        }
+        if (target)
+        {
+            pkt.fTarget[0] = target[0];
+            pkt.fTarget[1] = target[1];
+            pkt.fTarget[2] = target[2];
+        }
+        if (center)
+        {
+            pkt.fCenter[0] = center[0];
+            pkt.fCenter[1] = center[1];
+            pkt.fCenter[2] = center[2];
+        }
+        pkt.byteWeaponID = weaponId;
+
+        bool invokedInternal = false;
+        uintptr_t sampBase = GetBaseAddress();
+        if (sampBase && s_Config.sendBulletDataOffset != 0)
+        {
+            uintptr_t pLocal = GetLocalPlayer();
+            if (pLocal)
+            {
+                __try
+                {
+                    // CLocalPlayer::SendBulletData(stBulletData* pData)
+                    // stBulletData é a porção de 40 bytes (sem packetId)
+                    typedef void(__thiscall* SendBulletData_t)(void* pThis, void* pBulletData);
+                    auto fnSendBullet = reinterpret_cast<SendBulletData_t>(sampBase + s_Config.sendBulletDataOffset);
+                    if (fnSendBullet && !IsBadReadPtr(reinterpret_cast<void*>(fnSendBullet), 4))
+                    {
+                        fnSendBullet(reinterpret_cast<void*>(pLocal), &pkt.byteType);
+                        invokedInternal = true;
+                        Logger::Log("[SAMP][BULLET_SYNC] CLocalPlayer::SendBulletData nativo invocado: alvo=#%d arma=%d origin=(%.1f, %.1f, %.1f)",
+                            targetId, weaponId, pkt.fOrigin[0], pkt.fOrigin[1], pkt.fOrigin[2]);
+                    }
+                }
+                __except (EXCEPTION_EXECUTE_HANDLER)
+                {
+                    Logger::Log("[SAMP][BULLET_SYNC] Excecao em CLocalPlayer::SendBulletData");
+                }
+            }
+        }
+
+        // Transmissão direta via SendRawPacket caso CLocalPlayer::SendBulletData não esteja disponível
+        bool rawOk = false;
+        if (!invokedInternal)
+        {
+            rawOk = SendRawPacket(reinterpret_cast<const unsigned char*>(&pkt), sizeof(pkt), 1, 7, 0);
+            Logger::Log("[SAMP][BULLET_SYNC] SendRawPacket (206) transmitido: alvo=#%d arma=%d origin=(%.1f, %.1f, %.1f) status=%s",
+                targetId, weaponId, pkt.fOrigin[0], pkt.fOrigin[1], pkt.fOrigin[2], rawOk ? "OK" : "FALHA");
+        }
+
+        return (invokedInternal || rawOk);
+    }
+
     bool EnsureRakHook()
     {
         if (Main::IsShuttingDown()) return false;
+
+        // Garante também o hook de interceptação de dano do SAMP
+        EnsureSendTakeDamageHook();
+
         if (s_RakHookInstalled) return true;
 
         uintptr_t sampBase = GetBaseAddress();
@@ -1115,7 +1263,7 @@ namespace SAMP
         {
             uintptr_t directOff = (s_Config.poolsOffset > 4) ? (s_Config.poolsOffset - 4) : 0x3DA;
             static const uintptr_t candidateOffsets[] = {
-                directOff, 0x3DA, 0x3C9, 0x3D8, 0x3D6, 0x3DC, 0x3E2, 0x2C
+                directOff, 0x3C9, 0x3DA, 0x3CD, 0x3DE, 0x3C8, 0x3D8, 0x3D6, 0x3DC, 0x3E0, 0x3E2, 0x2C
             };
 
             for (uintptr_t off : candidateOffsets)
@@ -1124,38 +1272,106 @@ namespace SAMP
                     continue;
 
                 uintptr_t pCandidate = *reinterpret_cast<uintptr_t*>(sampInfo + off);
-                if (pCandidate > 0x10000 && !IsBadReadPtr(reinterpret_cast<void*>(pCandidate), sizeof(void*)))
+                if (pCandidate < 0x10000 || pCandidate > 0x7FFE0000)
+                    continue;
+
+                // Mode 1: pCandidate e um ponteiro para o objeto RakClient (cujo 1o DWORD e a VTable)
+                void** vtable = *reinterpret_cast<void***>(pCandidate);
+                if (vtable && !IsBadReadPtr(vtable, sizeof(void*) * 10))
                 {
-                    void** vtable = *reinterpret_cast<void***>(pCandidate);
-                    if (!IsBadReadPtr(vtable, sizeof(void*) * 10))
+                    uintptr_t fn6 = reinterpret_cast<uintptr_t>(vtable[6]);
+                    uintptr_t fn7 = reinterpret_cast<uintptr_t>(vtable[7]);
+                    if (IsValidCodePointer(fn6) && IsValidCodePointer(fn7))
                     {
-                        uintptr_t fn6 = reinterpret_cast<uintptr_t>(vtable[6]);
-                        uintptr_t fn7 = reinterpret_cast<uintptr_t>(vtable[7]);
-                        if (fn6 >= sampBase && fn6 < (sampBase + 0x400000) &&
-                            fn7 >= sampBase && fn7 < (sampBase + 0x400000))
+                        DWORD oldProtect = 0;
+                        if (VirtualProtect(&vtable[6], sizeof(void*) * 2, PAGE_EXECUTE_READWRITE, &oldProtect))
                         {
-                            DWORD oldProtect = 0;
-                            if (VirtualProtect(&vtable[6], sizeof(void*) * 2, PAGE_EXECUTE_READWRITE, &oldProtect))
-                            {
-                                s_OriginalSendData = reinterpret_cast<SendData_t>(vtable[6]);
-                                s_OriginalSendBitStream = reinterpret_cast<SendBitStream_t>(vtable[7]);
+                            s_OriginalSendBitStream = reinterpret_cast<SendBitStream_t>(vtable[6]);
+                            s_OriginalSendData = reinterpret_cast<SendData_t>(vtable[7]);
 
-                                vtable[6] = reinterpret_cast<void*>(&Hooked_SendData);
-                                vtable[7] = reinterpret_cast<void*>(&Hooked_SendBitStream);
+                            vtable[6] = reinterpret_cast<void*>(&Hooked_SendBitStream);
+                            vtable[7] = reinterpret_cast<void*>(&Hooked_SendData);
 
-                                VirtualProtect(&vtable[6], sizeof(void*) * 2, oldProtect, &oldProtect);
+                            VirtualProtect(&vtable[6], sizeof(void*) * 2, oldProtect, &oldProtect);
 
-                                s_HookedVTable = vtable;
-                                s_HookedOffset = off;
-                                s_RakHookInstalled = true;
-                                Logger::Log("[SAMP][DIAG][HOOK_SUCCESS] RakClient VMT hook instalado com sucesso! Offset=0x%X, VTable=%p, origSendData=%p, origSendBitStream=%p",
-                                    off, vtable, s_OriginalSendData, s_OriginalSendBitStream);
-                                return true;
-                            }
-                            else
-                            {
-                                Logger::Log("[SAMP][DIAG][HOOK_FAIL] VirtualProtect falhou ao alterar protecao da VTable no offset 0x%X", off);
-                            }
+                            s_HookedVTable = vtable;
+                            s_HookedOffset = off;
+                            s_RakHookInstalled = true;
+                            Logger::Log("[SAMP][DIAG][HOOK_SUCCESS] RakClient VMT hook instalado com sucesso! Offset=0x%X, VTable=%p, origSendBitStream=%p, origSendData=%p",
+                                off, vtable, s_OriginalSendBitStream, s_OriginalSendData);
+                            return true;
+                        }
+                        else
+                        {
+                            Logger::Log("[SAMP][DIAG][HOOK_FAIL] VirtualProtect falhou ao alterar protecao da VTable no offset 0x%X", off);
+                        }
+                    }
+                }
+
+                // Mode 2: pCandidate ja e o ponteiro direto da VTable (objeto embutido)
+                void** directVTable = reinterpret_cast<void**>(pCandidate);
+                if (directVTable && !IsBadReadPtr(directVTable, sizeof(void*) * 10))
+                {
+                    uintptr_t fn6 = reinterpret_cast<uintptr_t>(directVTable[6]);
+                    uintptr_t fn7 = reinterpret_cast<uintptr_t>(directVTable[7]);
+                    if (IsValidCodePointer(fn6) && IsValidCodePointer(fn7))
+                    {
+                        DWORD oldProtect = 0;
+                        if (VirtualProtect(&directVTable[6], sizeof(void*) * 2, PAGE_EXECUTE_READWRITE, &oldProtect))
+                        {
+                            s_OriginalSendBitStream = reinterpret_cast<SendBitStream_t>(directVTable[6]);
+                            s_OriginalSendData = reinterpret_cast<SendData_t>(directVTable[7]);
+
+                            directVTable[6] = reinterpret_cast<void*>(&Hooked_SendBitStream);
+                            directVTable[7] = reinterpret_cast<void*>(&Hooked_SendData);
+
+                            VirtualProtect(&directVTable[6], sizeof(void*) * 2, oldProtect, &oldProtect);
+
+                            s_HookedVTable = directVTable;
+                            s_HookedOffset = off;
+                            s_RakHookInstalled = true;
+                            Logger::Log("[SAMP][DIAG][HOOK_SUCCESS] RakClient direct VMT hook instalado! Offset=0x%X, VTable=%p, origSendBitStream=%p, origSendData=%p",
+                                off, directVTable, s_OriginalSendBitStream, s_OriginalSendData);
+                            return true;
+                        }
+                    }
+                }
+            }
+
+            // Fallback: varre a memoria de sampInfo byte a byte (0x20..0x450) para suportar packing desalinhado
+            for (uintptr_t off = 0x20; off <= 0x450; off++)
+            {
+                if (IsBadReadPtr(reinterpret_cast<void*>(sampInfo + off), sizeof(void*)))
+                    continue;
+
+                uintptr_t pCandidate = *reinterpret_cast<uintptr_t*>(sampInfo + off);
+                if (pCandidate < 0x10000 || pCandidate > 0x7FFE0000)
+                    continue;
+
+                void** vtable = *reinterpret_cast<void***>(pCandidate);
+                if (vtable && !IsBadReadPtr(vtable, sizeof(void*) * 10))
+                {
+                    uintptr_t fn6 = reinterpret_cast<uintptr_t>(vtable[6]);
+                    uintptr_t fn7 = reinterpret_cast<uintptr_t>(vtable[7]);
+                    if (IsValidCodePointer(fn6) && IsValidCodePointer(fn7))
+                    {
+                        DWORD oldProtect = 0;
+                        if (VirtualProtect(&vtable[6], sizeof(void*) * 2, PAGE_EXECUTE_READWRITE, &oldProtect))
+                        {
+                            s_OriginalSendBitStream = reinterpret_cast<SendBitStream_t>(vtable[6]);
+                            s_OriginalSendData = reinterpret_cast<SendData_t>(vtable[7]);
+
+                            vtable[6] = reinterpret_cast<void*>(&Hooked_SendBitStream);
+                            vtable[7] = reinterpret_cast<void*>(&Hooked_SendData);
+
+                            VirtualProtect(&vtable[6], sizeof(void*) * 2, oldProtect, &oldProtect);
+
+                            s_HookedVTable = vtable;
+                            s_HookedOffset = off;
+                            s_RakHookInstalled = true;
+                            Logger::Log("[SAMP][DIAG][HOOK_SUCCESS] RakClient VMT hook instalado via fallback scan! Offset=0x%X, VTable=%p",
+                                off, vtable);
+                            return true;
                         }
                     }
                 }
@@ -1191,6 +1407,9 @@ namespace SAMP
 
     TeardownStatus Shutdown()
     {
+        // Restaura sempre o hook de SendTakeDamage
+        RestoreSendTakeDamageHook();
+
         if (!s_RakHookInstalled)
         {
             s_TeardownStatus = TeardownStatus::NotHooked;
@@ -1204,15 +1423,15 @@ namespace SAMP
         {
             __try
             {
-                bool isOurHook = (s_HookedVTable[6] == reinterpret_cast<void*>(&Hooked_SendData)) ||
-                                 (s_HookedVTable[7] == reinterpret_cast<void*>(&Hooked_SendBitStream));
-                if (isOurHook && s_OriginalSendData && s_OriginalSendBitStream)
+                bool isOurHook = (s_HookedVTable[6] == reinterpret_cast<void*>(&Hooked_SendBitStream)) ||
+                                 (s_HookedVTable[7] == reinterpret_cast<void*>(&Hooked_SendData));
+                if (isOurHook && s_OriginalSendBitStream && s_OriginalSendData)
                 {
                     DWORD oldProtect = 0;
                     if (VirtualProtect(&s_HookedVTable[6], sizeof(void*) * 2, PAGE_EXECUTE_READWRITE, &oldProtect))
                     {
-                        s_HookedVTable[6] = reinterpret_cast<void*>(s_OriginalSendData);
-                        s_HookedVTable[7] = reinterpret_cast<void*>(s_OriginalSendBitStream);
+                        s_HookedVTable[6] = reinterpret_cast<void*>(s_OriginalSendBitStream);
+                        s_HookedVTable[7] = reinterpret_cast<void*>(s_OriginalSendData);
                         VirtualProtect(&s_HookedVTable[6], sizeof(void*) * 2, oldProtect, &oldProtect);
                         restored = true;
                         Logger::Log("[SAMP][DIAG][UNHOOK] RakClient VMT hook restaurado via cached VTable (offset 0x%X)", s_HookedOffset);
@@ -1222,7 +1441,7 @@ namespace SAMP
             __except (EXCEPTION_EXECUTE_HANDLER) {}
         }
 
-        // 2. Fallback: Se não restaurou pela vtable cacheada, varre os offsets candidatos
+        // 2. Fallback: Se nao restaurou pela vtable cacheada, varre os offsets candidatos
         if (!restored)
         {
             uintptr_t sampInfo = GetSAMPInfo();
@@ -1248,15 +1467,15 @@ namespace SAMP
                         if (!vtable || IsBadReadPtr(vtable, sizeof(void*) * 10))
                             continue;
 
-                        bool isOurHook = (vtable[6] == reinterpret_cast<void*>(&Hooked_SendData)) ||
-                                         (vtable[7] == reinterpret_cast<void*>(&Hooked_SendBitStream));
+                        bool isOurHook = (vtable[6] == reinterpret_cast<void*>(&Hooked_SendBitStream)) ||
+                                         (vtable[7] == reinterpret_cast<void*>(&Hooked_SendData));
                         if (isOurHook)
                         {
                             DWORD oldProtect = 0;
                             if (VirtualProtect(&vtable[6], sizeof(void*) * 2, PAGE_EXECUTE_READWRITE, &oldProtect))
                             {
-                                vtable[6] = reinterpret_cast<void*>(s_OriginalSendData);
-                                vtable[7] = reinterpret_cast<void*>(s_OriginalSendBitStream);
+                                vtable[6] = reinterpret_cast<void*>(s_OriginalSendBitStream);
+                                vtable[7] = reinterpret_cast<void*>(s_OriginalSendData);
                                 VirtualProtect(&vtable[6], sizeof(void*) * 2, oldProtect, &oldProtect);
                                 restored = true;
                                 Logger::Log("[SAMP][DIAG][UNHOOK] RakClient VMT hook restaurado via scan de fallback no offset 0x%X", off);

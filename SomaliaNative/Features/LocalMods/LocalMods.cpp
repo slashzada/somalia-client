@@ -2,6 +2,7 @@
 #include "../../Config/Config.h"
 #include "../../Core/Logger.h"
 #include "../../Core/RuntimeState.h"
+#include "../../Engine/SAMP/SAMP.h"
 #include <math.h>
 
 namespace LocalMods
@@ -90,10 +91,10 @@ namespace LocalMods
                 s_wasNoBikeFallActive = false;
             }
 
-            // 4. LOCAL GODMODE (Imunidade fisica a tiros, fogo, explosao, colisoes e porrada: +0x48)
+            // 4. LOCAL GODMODE (Imunidade fisica a tiros, fogo, explosao, colisoes e porrada: +0x42)
             if (g_MenuState.player.godmode)
             {
-                *reinterpret_cast<uint8_t*>(pedAddr + 0x48) |= 0x1F;
+                *reinterpret_cast<uint8_t*>(pedAddr + 0x42) |= 0xFC; // bBulletProof, bFireProof, bCollisionProof, bMeleeProof, bInvulnerable, bExplosionProof
 
                 float* pHealth = reinterpret_cast<float*>(pedAddr + 0x540);
                 if (*pHealth < 100.0f && *pHealth > 0.0f)
@@ -102,16 +103,16 @@ namespace LocalMods
                 }
             }
 
-            // 5. FAST SPRINT (Acelera a velocidade de corrida)
+            // 5. FAST SPRINT (Acelera a velocidade de corrida sem disparar anti-cheat de speedhack)
             if (g_MenuState.player.fastRun)
             {
                 float* pMoveSpeedX = reinterpret_cast<float*>(pedAddr + 0x44);
                 float* pMoveSpeedY = reinterpret_cast<float*>(pedAddr + 0x48);
                 float speed2D = sqrtf((*pMoveSpeedX) * (*pMoveSpeedX) + (*pMoveSpeedY) * (*pMoveSpeedY));
-                if (speed2D > 0.03f && speed2D < 0.45f)
+                if (speed2D > 0.03f && speed2D < 0.26f)
                 {
-                    *pMoveSpeedX *= 1.25f;
-                    *pMoveSpeedY *= 1.25f;
+                    *pMoveSpeedX *= 1.15f;
+                    *pMoveSpeedY *= 1.15f;
                 }
             }
 
@@ -138,6 +139,81 @@ namespace LocalMods
                     if (*pPedState == 0x38) // STUMBLE only - JAMAIS altera 0x36 ou 0x37 (DEAD/DIE)!
                     {
                         *pPedState = 1; // PED_STATE_IDLE
+                    }
+                }
+            }
+
+            // 8. ANTI-HS (Protecao local contra dano letal excessivo de tiro na cabeca)
+            if (g_MenuState.player.antiHS)
+            {
+                if (SAMP::IsLoaded())
+                {
+                    SAMP::EnsureSendTakeDamageHook();
+                }
+
+                float* pHealth = reinterpret_cast<float*>(pedAddr + 0x540);
+                if (pHealth && !IsBadReadPtr(pHealth, sizeof(float)))
+                {
+                    static float s_LastHealth = 100.0f;
+                    float curHealth = *pHealth;
+
+                    // Se houve dano
+                    if (curHealth < s_LastHealth)
+                    {
+                        float lostHp = s_LastHealth - curHealth;
+                        uint32_t* pPedState = reinterpret_cast<uint32_t*>(pedAddr + 0x530);
+
+                        // Se a vida zerou ou ped entrou em estado de morte repentina por headshot crítico
+                        if (curHealth <= 0.0f || (pPedState && (*pPedState == 0x36 || *pPedState == 0x37)))
+                        {
+                            *pHealth = (s_LastHealth > g_MenuState.player.antiHSDamageCap) ?
+                                       (s_LastHealth - g_MenuState.player.antiHSDamageCap) : 15.0f;
+                            if (*pHealth <= 0.0f) *pHealth = 15.0f;
+
+                            if (pPedState && (*pPedState == 0x36 || *pPedState == 0x37))
+                            {
+                                *pPedState = 1; // PED_STATE_IDLE
+                            }
+                            Logger::Log("[SOMALIA][ANTI-HS] Morte local impedida! Vida restaurada para %.1f HP", *pHealth);
+                        }
+                        else if (lostHp > g_MenuState.player.antiHSDamageCap)
+                        {
+                            *pHealth = s_LastHealth - g_MenuState.player.antiHSDamageCap;
+                            Logger::Log("[SOMALIA][ANTI-HS] Dano local regulado! Perda de %.1f HP limitada para %.1f HP. Vida restante: %.1f",
+                                lostHp, g_MenuState.player.antiHSDamageCap, *pHealth);
+                        }
+                    }
+
+                    // Se a vida restante for crítica (<= 5 HP), amortece para evitar morte imediata
+                    if (*pHealth > 0.0f && *pHealth <= 5.0f)
+                    {
+                        *pHealth = 15.0f;
+                    }
+
+                    s_LastHealth = *pHealth;
+                }
+            }
+
+            // 9. FALL PROOF (Imunidade a dano de queda)
+            if (g_MenuState.player.fallProof)
+            {
+                // Protege contra queda sem corromper moveSpeed
+                float* pMoveZ = reinterpret_cast<float*>(pedAddr + 0x4C);
+                if (pMoveZ && *pMoveZ < -0.40f)
+                {
+                    *pMoveZ = -0.15f; // Amortece velocidade terminal de queda
+                }
+            }
+
+            // 10. AUTO BHOP (Salto automatico continuo)
+            if (g_MenuState.player.autoBhop && !g_MenuState.player.megaJump)
+            {
+                if (GetAsyncKeyState(VK_SPACE) & 0x8000)
+                {
+                    float* pMoveSpeedZ = reinterpret_cast<float*>(pedAddr + 0x4C);
+                    if (fabsf(*pMoveSpeedZ) < 0.02f)
+                    {
+                        *pMoveSpeedZ = 0.14f;
                     }
                 }
             }
@@ -371,6 +447,44 @@ namespace LocalMods
                     *reinterpret_cast<float*>(vehAddr + 0x58) = 0.0f;
                 }
             }
+
+            // 7. SUPER BRAKE (Freio instantaneo com barra de espaco ou 'S')
+            if (g_MenuState.vehicle.superBrake)
+            {
+                if ((GetAsyncKeyState(VK_SPACE) & 0x8000) || (GetAsyncKeyState('S') & 0x8000))
+                {
+                    float* pMoveSpeedX = reinterpret_cast<float*>(vehAddr + 0x44);
+                    float* pMoveSpeedY = reinterpret_cast<float*>(vehAddr + 0x48);
+                    *pMoveSpeedX *= 0.82f;
+                    *pMoveSpeedY *= 0.82f;
+                }
+            }
+
+            // 8. HEAVY VEHICLE (Massa extrema para colisoes)
+            if (g_MenuState.vehicle.heavyVehicle)
+            {
+                *reinterpret_cast<float*>(vehAddr + 0x8C) = 50000.0f;
+            }
+
+            // 9. DRIFT MODE (Reduz tracao para permitir derrapagens controladas)
+            if (g_MenuState.vehicle.driftMode)
+            {
+                static float s_OrigTraction = -1.0f;
+                uintptr_t pHandling = *reinterpret_cast<uintptr_t*>(vehAddr + 0x384);
+                if (pHandling)
+                {
+                    float* pTraction = reinterpret_cast<float*>(pHandling + 0xA8);
+                    if (s_OrigTraction < 0.0f)
+                        s_OrigTraction = *pTraction;
+                    *pTraction = 0.35f; // Tracao reduzida para drift
+                }
+            }
+
+            // 10. UNLIMITED NITRO (Flag nativa de NOS infinito do GTA SA)
+            if (g_MenuState.vehicle.unlimitedNitro)
+            {
+                *reinterpret_cast<uint8_t*>(0x00969165) = 1;
+            }
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
         {
@@ -414,12 +528,199 @@ namespace LocalMods
                     s_wasWeatherActive = false;
                 }
 
-                // 3. TIME CHANGER
-                if (g_MenuState.visuals.timeChanger)
+                // 3. TIME CHANGER / LOCK HOUR
+                if (g_MenuState.visuals.timeChanger || g_MenuState.visuals.lockHour)
                 {
                     uint8_t targetHour = static_cast<uint8_t>(g_MenuState.visuals.timeHour % 24);
                     *reinterpret_cast<uint8_t*>(0x00B70153) = targetHour;
                     *reinterpret_cast<uint8_t*>(0x00B70152) = 0;
+                }
+            }
+
+            // 4. NO FOG / EXTENDED DRAW DISTANCE (Remove nevoa do horizonte)
+            if (g_MenuState.visuals.noFog || g_MenuState.visuals.extendedDrawDist)
+            {
+                *reinterpret_cast<float*>(0x00B79038) = 3500.0f; // FarClip
+                *reinterpret_cast<float*>(0x00B7903C) = 3500.0f; // FogClip
+            }
+
+            // 5. FULLBRIGHT / AMBIENT BOOST
+            if (g_MenuState.visuals.fullbright)
+            {
+                *reinterpret_cast<float*>(0x00B79E40) = 0.90f;
+                *reinterpret_cast<float*>(0x00B79E44) = 0.90f;
+                *reinterpret_cast<float*>(0x00B79E48) = 0.90f;
+            }
+
+            // 6. CAMERA FOV & NO CAM SHAKE
+            if (g_MenuState.visuals.customCameraFOV)
+            {
+                *reinterpret_cast<float*>(0x00B6F028 + 0x60) = g_MenuState.visuals.cameraFOV;
+            }
+            if (g_MenuState.visuals.noCamShake)
+            {
+                *reinterpret_cast<float*>(0x00B6F028 + 0x8C) = 0.0f;
+            }
+
+            // 7. REMOVE GRASS (NOP CPlantMgr::Render — 0x005DD840)
+            {
+                static uint8_t s_OrigGrass = 0;
+                static bool s_GrassPatched = false;
+                if (g_MenuState.visuals.removeGrass && !s_GrassPatched)
+                {
+                    DWORD oldProt;
+                    if (VirtualProtect(reinterpret_cast<void*>(0x005DD840), 1, PAGE_EXECUTE_READWRITE, &oldProt))
+                    {
+                        s_OrigGrass = *reinterpret_cast<uint8_t*>(0x005DD840);
+                        *reinterpret_cast<uint8_t*>(0x005DD840) = 0xC3; // RET
+                        VirtualProtect(reinterpret_cast<void*>(0x005DD840), 1, oldProt, &oldProt);
+                        s_GrassPatched = true;
+                    }
+                }
+                else if (!g_MenuState.visuals.removeGrass && s_GrassPatched)
+                {
+                    DWORD oldProt;
+                    if (VirtualProtect(reinterpret_cast<void*>(0x005DD840), 1, PAGE_EXECUTE_READWRITE, &oldProt))
+                    {
+                        *reinterpret_cast<uint8_t*>(0x005DD840) = s_OrigGrass;
+                        VirtualProtect(reinterpret_cast<void*>(0x005DD840), 1, oldProt, &oldProt);
+                        s_GrassPatched = false;
+                    }
+                }
+            }
+
+            // 8. REMOVE RAIN (NOP CWeather::RenderRainStreaks — 0x0072C430)
+            {
+                static uint8_t s_OrigRain = 0;
+                static bool s_RainPatched = false;
+                if (g_MenuState.visuals.removeRain && !s_RainPatched)
+                {
+                    DWORD oldProt;
+                    if (VirtualProtect(reinterpret_cast<void*>(0x0072C430), 1, PAGE_EXECUTE_READWRITE, &oldProt))
+                    {
+                        s_OrigRain = *reinterpret_cast<uint8_t*>(0x0072C430);
+                        *reinterpret_cast<uint8_t*>(0x0072C430) = 0xC3;
+                        VirtualProtect(reinterpret_cast<void*>(0x0072C430), 1, oldProt, &oldProt);
+                        s_RainPatched = true;
+                    }
+                }
+                else if (!g_MenuState.visuals.removeRain && s_RainPatched)
+                {
+                    DWORD oldProt;
+                    if (VirtualProtect(reinterpret_cast<void*>(0x0072C430), 1, PAGE_EXECUTE_READWRITE, &oldProt))
+                    {
+                        *reinterpret_cast<uint8_t*>(0x0072C430) = s_OrigRain;
+                        VirtualProtect(reinterpret_cast<void*>(0x0072C430), 1, oldProt, &oldProt);
+                        s_RainPatched = false;
+                    }
+                }
+            }
+
+            // 9. CLEAR WATER (Transparencia da agua — CWaterLevel alpha)
+            {
+                static float s_OrigWaterAlpha = -1.0f;
+                static bool s_WaterPatched = false;
+                if (g_MenuState.visuals.clearWater && !s_WaterPatched)
+                {
+                    DWORD oldProt;
+                    if (VirtualProtect(reinterpret_cast<void*>(0x008D37D0), 4, PAGE_EXECUTE_READWRITE, &oldProt))
+                    {
+                        s_OrigWaterAlpha = *reinterpret_cast<float*>(0x008D37D0);
+                        *reinterpret_cast<float*>(0x008D37D0) = 0.3f;
+                        VirtualProtect(reinterpret_cast<void*>(0x008D37D0), 4, oldProt, &oldProt);
+                        s_WaterPatched = true;
+                    }
+                }
+                else if (!g_MenuState.visuals.clearWater && s_WaterPatched)
+                {
+                    DWORD oldProt;
+                    if (VirtualProtect(reinterpret_cast<void*>(0x008D37D0), 4, PAGE_EXECUTE_READWRITE, &oldProt))
+                    {
+                        *reinterpret_cast<float*>(0x008D37D0) = s_OrigWaterAlpha;
+                        VirtualProtect(reinterpret_cast<void*>(0x008D37D0), 4, oldProt, &oldProt);
+                        s_WaterPatched = false;
+                    }
+                }
+            }
+
+            // 10. CLEAR SKY (NOP CClouds::Render — 0x00714190)
+            {
+                static uint8_t s_OrigClouds = 0;
+                static bool s_CloudsPatched = false;
+                if (g_MenuState.visuals.clearSky && !s_CloudsPatched)
+                {
+                    DWORD oldProt;
+                    if (VirtualProtect(reinterpret_cast<void*>(0x00714190), 1, PAGE_EXECUTE_READWRITE, &oldProt))
+                    {
+                        s_OrigClouds = *reinterpret_cast<uint8_t*>(0x00714190);
+                        *reinterpret_cast<uint8_t*>(0x00714190) = 0xC3;
+                        VirtualProtect(reinterpret_cast<void*>(0x00714190), 1, oldProt, &oldProt);
+                        s_CloudsPatched = true;
+                    }
+                }
+                else if (!g_MenuState.visuals.clearSky && s_CloudsPatched)
+                {
+                    DWORD oldProt;
+                    if (VirtualProtect(reinterpret_cast<void*>(0x00714190), 1, PAGE_EXECUTE_READWRITE, &oldProt))
+                    {
+                        *reinterpret_cast<uint8_t*>(0x00714190) = s_OrigClouds;
+                        VirtualProtect(reinterpret_cast<void*>(0x00714190), 1, oldProt, &oldProt);
+                        s_CloudsPatched = false;
+                    }
+                }
+            }
+
+            // 11. HIDE RADAR (NOP CRadar::DrawMap — 0x0058A330)
+            {
+                static uint8_t s_OrigRadar = 0;
+                static bool s_RadarPatched = false;
+                if (g_MenuState.visuals.hideRadar && !s_RadarPatched)
+                {
+                    DWORD oldProt;
+                    if (VirtualProtect(reinterpret_cast<void*>(0x0058A330), 1, PAGE_EXECUTE_READWRITE, &oldProt))
+                    {
+                        s_OrigRadar = *reinterpret_cast<uint8_t*>(0x0058A330);
+                        *reinterpret_cast<uint8_t*>(0x0058A330) = 0xC3;
+                        VirtualProtect(reinterpret_cast<void*>(0x0058A330), 1, oldProt, &oldProt);
+                        s_RadarPatched = true;
+                    }
+                }
+                else if (!g_MenuState.visuals.hideRadar && s_RadarPatched)
+                {
+                    DWORD oldProt;
+                    if (VirtualProtect(reinterpret_cast<void*>(0x0058A330), 1, PAGE_EXECUTE_READWRITE, &oldProt))
+                    {
+                        *reinterpret_cast<uint8_t*>(0x0058A330) = s_OrigRadar;
+                        VirtualProtect(reinterpret_cast<void*>(0x0058A330), 1, oldProt, &oldProt);
+                        s_RadarPatched = false;
+                    }
+                }
+            }
+
+            // 12. HIDE HUD (NOP CHud::Draw — 0x00589190)
+            {
+                static uint8_t s_OrigHud = 0;
+                static bool s_HudPatched = false;
+                if (g_MenuState.visuals.hideHUD && !s_HudPatched)
+                {
+                    DWORD oldProt;
+                    if (VirtualProtect(reinterpret_cast<void*>(0x00589190), 1, PAGE_EXECUTE_READWRITE, &oldProt))
+                    {
+                        s_OrigHud = *reinterpret_cast<uint8_t*>(0x00589190);
+                        *reinterpret_cast<uint8_t*>(0x00589190) = 0xC3;
+                        VirtualProtect(reinterpret_cast<void*>(0x00589190), 1, oldProt, &oldProt);
+                        s_HudPatched = true;
+                    }
+                }
+                else if (!g_MenuState.visuals.hideHUD && s_HudPatched)
+                {
+                    DWORD oldProt;
+                    if (VirtualProtect(reinterpret_cast<void*>(0x00589190), 1, PAGE_EXECUTE_READWRITE, &oldProt))
+                    {
+                        *reinterpret_cast<uint8_t*>(0x00589190) = s_OrigHud;
+                        VirtualProtect(reinterpret_cast<void*>(0x00589190), 1, oldProt, &oldProt);
+                        s_HudPatched = false;
+                    }
                 }
             }
         }

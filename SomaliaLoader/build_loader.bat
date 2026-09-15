@@ -37,7 +37,14 @@ call "%VS_PATH%" x86
 if not exist "build" mkdir "build"
 cd build
 
-echo [INFO] Compilando SomaliaLoader.exe...
+echo [INFO] Atualizando payload embutido do SomaliaNative...
+if exist "..\..\scripts\embed_payload.py" (
+    python "..\..\scripts\embed_payload.py"
+) else if exist "..\scripts\embed_payload.py" (
+    python "..\scripts\embed_payload.py"
+)
+
+echo [INFO] Compilando SomaliaLoader.exe (Standalone Single-EXE)...
 
 cl /nologo /O2 /MT /std:c++20 /EHsc /W3 /utf-8 /D "WIN32" /D "_WINDOWS" /D "NDEBUG" /D "_CRT_SECURE_NO_WARNINGS" ^
    /I ".." ^
@@ -48,10 +55,12 @@ cl /nologo /O2 /MT /std:c++20 /EHsc /W3 /utf-8 /D "WIN32" /D "_WINDOWS" /D "NDEB
    /I "..\Auth" ^
    /I "..\Config" ^
    /I "..\Injector" ^
+   /I "..\Payload" ^
    ..\Main.cpp ^
    ..\Auth\KeyAuth.cpp ^
    ..\Config\LoaderConfig.cpp ^
    ..\Injector\Injector.cpp ^
+   ..\Payload\SomaliaPayload.cpp ^
    ..\UI\LoaderMenu.cpp ^
    ..\..\SomaliaNative\Render\ImGui\imgui.cpp ^
    ..\..\SomaliaNative\Render\ImGui\imgui_draw.cpp ^
@@ -69,6 +78,7 @@ if %ERRORLEVEL% equ 0 (
     echo Local: %CD%\SomaliaLoader.exe
     echo ========================================================
     copy /Y "SomaliaLoader.exe" "..\..\SomaliaLoader.exe"
+    copy /Y "SomaliaLoader.exe" "..\..\Somalia.exe"
     exit /b 0
 ) else (
     echo ========================================================

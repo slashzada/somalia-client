@@ -1,8 +1,11 @@
 #include "Injector.h"
+#include "../Payload/SomaliaPayload.h"
+#include "../Config/LoaderConfig.h"
 #include <tlhelp32.h>
 #include <thread>
 #include <atomic>
 #include <chrono>
+#include <vector>
 
 namespace Injector
 {
@@ -40,6 +43,140 @@ namespace Injector
         return (FindProcessId("gta_sa.exe") != 0);
     }
 
+    static std::string s_ExtractedPayloadPath = "";
+
+    std::string GetOrExtractPayload(std::string& outError)
+    {
+        // 1. Verifica se já existe um arquivo local na pasta atual ou caminho relativo (override para desenvolvimento)
+        char exePath[MAX_PATH] = { 0 };
+        GetModuleFileNameA(NULL, exePath, MAX_PATH);
+        std::string dir = exePath;
+        size_t lastSlash = dir.find_last_of("\\/");
+        if (lastSlash != std::string::npos)
+            dir = dir.substr(0, lastSlash);
+
+        std::vector<std::string> localCandidates = {
+            dir + "\\SomaliaNative.asi",
+            dir + "\\SomaliaNative.dll",
+            dir + "\\build\\SomaliaNative.asi",
+            dir + "\\..\\SomaliaNative\\build\\SomaliaNative.asi",
+            dir + "\\..\\SomaliaNative.asi",
+            dir + "\\dist\\SomaliaNative.asi",
+            "SomaliaNative.asi",
+            "SomaliaNative.dll"
+        };
+
+        for (const auto& c : localCandidates)
+        {
+            if (GetFileAttributesA(c.c_str()) != INVALID_FILE_ATTRIBUTES)
+            {
+                char fullPath[MAX_PATH] = { 0 };
+                GetFullPathNameA(c.c_str(), MAX_PATH, fullPath, NULL);
+                return std::string(fullPath);
+            }
+        }
+
+        // 2. Se não houver arquivo externo no disco, extrai o payload C++ embutido no próprio .exe
+        if (g_SomaliaNativePayloadSize == 0 || g_SomaliaNativePayload == nullptr)
+        {
+            outError = "Payload embutido nao disponivel e nenhum arquivo .asi/.dll localizado.";
+            return "";
+        }
+
+        char tempDir[MAX_PATH] = { 0 };
+        if (!GetTempPathA(MAX_PATH, tempDir))
+        {
+            outError = "Falha ao obter diretorio temporario do sistema.";
+            return "";
+        }
+
+        std::string extractedDll = std::string(tempDir) + "somalia_core.dll";
+
+        // 2.1 Verifica se o arquivo principal já existe e é válido
+        HANDLE hExisting = CreateFileA(extractedDll.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+        if (hExisting != INVALID_HANDLE_VALUE)
+        {
+            DWORD sz = GetFileSize(hExisting, NULL);
+            CloseHandle(hExisting);
+            if (sz == g_SomaliaNativePayloadSize)
+            {
+                s_ExtractedPayloadPath = extractedDll;
+                return extractedDll;
+            }
+        }
+
+        // 2.2 Tenta gravar no arquivo principal
+        FILE* f = fopen(extractedDll.c_str(), "wb");
+        if (f)
+        {
+            size_t written = fwrite(g_SomaliaNativePayload, 1, g_SomaliaNativePayloadSize, f);
+            fclose(f);
+            if (written == g_SomaliaNativePayloadSize)
+            {
+                s_ExtractedPayloadPath = extractedDll;
+                return extractedDll;
+            }
+        }
+
+        // 2.3 Caso o arquivo principal esteja travado por processo aberto, tenta nomes alternativos em %TEMP%
+        for (int i = 1; i <= 20; ++i)
+        {
+            std::string altDll = std::string(tempDir) + "somalia_core_" + std::to_string(i) + ".dll";
+
+            HANDLE hAlt = CreateFileA(altDll.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
+            if (hAlt != INVALID_HANDLE_VALUE)
+            {
+                DWORD sz = GetFileSize(hAlt, NULL);
+                CloseHandle(hAlt);
+                if (sz == g_SomaliaNativePayloadSize)
+                {
+                    s_ExtractedPayloadPath = altDll;
+                    return altDll;
+                }
+            }
+
+            FILE* fAlt = fopen(altDll.c_str(), "wb");
+            if (fAlt)
+            {
+                size_t written = fwrite(g_SomaliaNativePayload, 1, g_SomaliaNativePayloadSize, fAlt);
+                fclose(fAlt);
+                if (written == g_SomaliaNativePayloadSize)
+                {
+                    s_ExtractedPayloadPath = altDll;
+                    return altDll;
+                }
+            }
+        }
+
+        outError = "Falha ao extrair DLL embutida em: " + extractedDll;
+        return "";
+    }
+
+    void CleanupExtractedPayload()
+    {
+        if (!s_ExtractedPayloadPath.empty())
+        {
+            DeleteFileA(s_ExtractedPayloadPath.c_str());
+            s_ExtractedPayloadPath.clear();
+        }
+
+        char tempDir[MAX_PATH] = { 0 };
+        if (GetTempPathA(MAX_PATH, tempDir))
+        {
+            std::string pattern = std::string(tempDir) + "somalia_*.dll";
+            WIN32_FIND_DATAA fd;
+            HANDLE hFind = FindFirstFileA(pattern.c_str(), &fd);
+            if (hFind != INVALID_HANDLE_VALUE)
+            {
+                do {
+                    std::string fPath = std::string(tempDir) + fd.cFileName;
+                    DeleteFileA(fPath.c_str());
+                } while (FindNextFileA(hFind, &fd));
+                FindClose(hFind);
+            }
+        }
+    }
+
     bool InjectDll(DWORD pid, const std::string& dllPath, std::string& outError)
     {
         if (pid == 0)
@@ -49,13 +186,46 @@ namespace Injector
             return false;
         }
 
-        // Verifica existencia do arquivo
-        DWORD fileAttr = GetFileAttributesA(dllPath.c_str());
+        // Checagem se o Somalia já está injetado no GTA SA
+        HANDLE hCheckSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
+        if (hCheckSnap != INVALID_HANDLE_VALUE)
+        {
+            MODULEENTRY32 meCheck;
+            meCheck.dwSize = sizeof(MODULEENTRY32);
+            if (Module32First(hCheckSnap, &meCheck))
+            {
+                do {
+                    std::string mName = meCheck.szModule;
+                    for (auto& c : mName) c = tolower(c);
+                    if (mName.find("somalia") != std::string::npos)
+                    {
+                        CloseHandle(hCheckSnap);
+                        s_StatusMessage = "Somalia ja esta injetado no GTA SA! Pressione F5 no jogo.";
+                        return true;
+                    }
+                } while (Module32Next(hCheckSnap, &meCheck));
+            }
+            CloseHandle(hCheckSnap);
+        }
+
+        std::string targetPath = dllPath;
+
+        // Se o caminho estiver vazio ou o arquivo não existir fisicamente, tenta usar/extrair o payload embutido
+        DWORD fileAttr = targetPath.empty() ? INVALID_FILE_ATTRIBUTES : GetFileAttributesA(targetPath.c_str());
         if (fileAttr == INVALID_FILE_ATTRIBUTES || (fileAttr & FILE_ATTRIBUTE_DIRECTORY))
         {
-            outError = "Arquivo DLL/ASI nao encontrado: " + dllPath;
-            s_StatusMessage = outError;
-            return false;
+            std::string extractErr;
+            std::string resolved = GetOrExtractPayload(extractErr);
+            if (!resolved.empty())
+            {
+                targetPath = resolved;
+            }
+            else
+            {
+                outError = extractErr.empty() ? ("Arquivo DLL/ASI nao encontrado: " + dllPath) : extractErr;
+                s_StatusMessage = outError;
+                return false;
+            }
         }
 
         HANDLE hProcess = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION | PROCESS_VM_WRITE | PROCESS_VM_READ, FALSE, pid);
@@ -66,7 +236,22 @@ namespace Injector
             return false;
         }
 
-        size_t pathSize = dllPath.length() + 1;
+        // Sincroniza configuracao e sessao KeyAuth na pasta do GTA e registro
+        char gtaFullPath[MAX_PATH] = { 0 };
+        DWORD dwSize = MAX_PATH;
+        if (QueryFullProcessImageNameA(hProcess, 0, gtaFullPath, &dwSize))
+        {
+            std::string gtaPathStr = gtaFullPath;
+            size_t lastBackslash = gtaPathStr.find_last_of("\\/");
+            if (lastBackslash != std::string::npos)
+            {
+                std::string gtaDir = gtaPathStr.substr(0, lastBackslash);
+                ConfigManager::Get().gtaPath = gtaDir;
+            }
+        }
+        ConfigManager::Save();
+
+        size_t pathSize = targetPath.length() + 1;
         LPVOID pRemoteBuf = VirtualAllocEx(hProcess, NULL, pathSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
         if (!pRemoteBuf)
         {
@@ -77,7 +262,7 @@ namespace Injector
         }
 
         SIZE_T bytesWritten = 0;
-        if (!WriteProcessMemory(hProcess, pRemoteBuf, dllPath.c_str(), pathSize, &bytesWritten) || bytesWritten < pathSize)
+        if (!WriteProcessMemory(hProcess, pRemoteBuf, targetPath.c_str(), pathSize, &bytesWritten) || bytesWritten < pathSize)
         {
             VirtualFreeEx(hProcess, pRemoteBuf, 0, MEM_RELEASE);
             CloseHandle(hProcess);
@@ -141,11 +326,20 @@ namespace Injector
 
     bool UnloadGame(const std::string& moduleName, std::string& outError)
     {
+        // 1. Sinaliza o evento cooperativo para desinjecao limpa pelo proprio SomaliaNative (restaurando D3D9/WndProc)
+        HANDLE hEvent = OpenEventA(EVENT_MODIFY_STATE, FALSE, "Somalia_UnloadEvent");
+        if (hEvent)
+        {
+            SetEvent(hEvent);
+            CloseHandle(hEvent);
+            Sleep(400); // Aguarda SomaliaNative descarregar e restaurar hooks
+        }
+
         DWORD pid = FindProcessId("gta_sa.exe");
         if (pid == 0)
         {
             outError = "gta_sa.exe nao esta em execucao.";
-            return false;
+            return true;
         }
 
         HANDLE hSnap = CreateToolhelp32Snapshot(TH32CS_SNAPMODULE | TH32CS_SNAPMODULE32, pid);
@@ -157,54 +351,50 @@ namespace Injector
 
         MODULEENTRY32 me;
         me.dwSize = sizeof(MODULEENTRY32);
-        HMODULE hTargetMod = NULL;
+        std::vector<HMODULE> somaliaModules;
 
         if (Module32First(hSnap, &me))
         {
             do
             {
-                if (_stricmp(me.szModule, moduleName.c_str()) == 0 ||
-                    strstr(me.szExePath, moduleName.c_str()) != NULL)
+                std::string modName = me.szModule;
+                for (auto& c : modName) c = tolower(c);
+
+                if (modName.find("somalia") != std::string::npos ||
+                    (!moduleName.empty() && _stricmp(me.szModule, moduleName.c_str()) == 0))
                 {
-                    hTargetMod = me.hModule;
-                    break;
+                    somaliaModules.push_back(me.hModule);
                 }
             } while (Module32Next(hSnap, &me));
         }
         CloseHandle(hSnap);
 
-        if (!hTargetMod)
+        if (somaliaModules.empty())
         {
-            outError = "Modulo " + moduleName + " nao encontrado no processo.";
-            return false;
+            s_StatusMessage = "Cheat desinjetado com sucesso do jogo!";
+            outError = "Modulo desinjetado com sucesso!";
+            return true;
         }
 
+        // Se algum modulo persistir na memoria, realiza FreeLibrary remoto cooperativo
         HANDLE hProc = OpenProcess(PROCESS_CREATE_THREAD | PROCESS_QUERY_INFORMATION | PROCESS_VM_OPERATION, FALSE, pid);
-        if (!hProc)
+        if (hProc)
         {
-            outError = "Falha ao abrir processo gta_sa.exe.";
-            return false;
-        }
-
-        LPVOID pFreeLib = (LPVOID)GetProcAddress(GetModuleHandleA("kernel32.dll"), "FreeLibrary");
-        if (!pFreeLib)
-        {
+            LPVOID pFreeLib = (LPVOID)GetProcAddress(GetModuleHandleA("kernel32.dll"), "FreeLibrary");
+            if (pFreeLib)
+            {
+                for (HMODULE hMod : somaliaModules)
+                {
+                    HANDLE hThread = CreateRemoteThread(hProc, NULL, 0, (LPTHREAD_START_ROUTINE)pFreeLib, (LPVOID)hMod, 0, NULL);
+                    if (hThread)
+                    {
+                        WaitForSingleObject(hThread, 2000);
+                        CloseHandle(hThread);
+                    }
+                }
+            }
             CloseHandle(hProc);
-            outError = "FreeLibrary nao encontrada.";
-            return false;
         }
-
-        HANDLE hThread = CreateRemoteThread(hProc, NULL, 0, (LPTHREAD_START_ROUTINE)pFreeLib, (LPVOID)hTargetMod, 0, NULL);
-        if (!hThread)
-        {
-            CloseHandle(hProc);
-            outError = "Falha ao criar thread remota de desinjecao.";
-            return false;
-        }
-
-        WaitForSingleObject(hThread, 3000);
-        CloseHandle(hThread);
-        CloseHandle(hProc);
 
         s_StatusMessage = "Cheat desinjetado com sucesso do jogo!";
         outError = "Modulo desinjetado com sucesso!";

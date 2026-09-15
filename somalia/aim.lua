@@ -1,6 +1,6 @@
 --[[
-    Somalia - Legit Aimbot & Silent Aim Module
-    Renderização separada e precisa de FOV para Aimbot e Silent Aim
+    Somalia - Legit Aimbot Module
+    Renderização precisa de FOV e assistência de mira para Legit Aimbot
 ]]
 
 local okImgui, imgui = pcall(require, 'imgui')
@@ -87,22 +87,6 @@ function Aim.renderFovCircle(config, customDrawList)
             if (now - Aim.lastFovLogTick) >= 2.0 then
                 Aim.lastFovLogTick = now
                 print(string.format("[SOMALIA][FOV] ativo | arma: %d | raio: %.1f px | desenhado", wId, radiusAim))
-            end
-        end
-    end
-
-    -- 2.2 FOV DO SILENT AIM (INDEPENDENTE E COM IDENTIFICAÇÃO VISUAL PRÓPRIA)
-    if config.silent and config.silent.globalEnabled ~= false then
-        local wSil = getWeaponConfig(config, "silent", wId)
-        if wSil and wSil.enabled and wSil.showFov then
-            local radiusSil = tonumber(wSil.fovSize) or 70
-            local fovColorSil = imgui.ImColor(255, 80, 80, 120):GetU32() -- Vermelho/Laranja Silent FOV
-            
-            drawList:AddCircle(imgui.ImVec2(cx, cy), radiusSil, fovColorSil, 36)
-            
-            if (now - Aim.lastSilentFovLogTick) >= 2.0 then
-                Aim.lastSilentFovLogTick = now
-                print(string.format("[SOMALIA][SILENT FOV] enabled | weapon: %d | radius: %.1f | draw called", wId, radiusSil))
             end
         end
     end

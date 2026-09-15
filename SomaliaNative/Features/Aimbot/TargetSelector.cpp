@@ -9,7 +9,7 @@
 
 namespace TargetSelector
 {
-    TargetInfo FindBestTarget(const WeaponAimConfig& config, ImVec2 screenCenter, float fovRadius, int& outCandidates, int& outInsideFov)
+    TargetInfo FindBestTarget(const WeaponAimConfig& config, ImVec2 screenCenter, float fovRadius, int& outCandidates, int& outInsideFov, bool isRage)
     {
         TargetInfo bestTarget = {};
         bestTarget.valid = false;
@@ -22,17 +22,24 @@ namespace TargetSelector
         if (!SAMP::IsLoaded())
             return bestTarget;
 
+        uintptr_t pPlayerPool = SAMP::GetPlayerPool();
+        if (!pPlayerPool)
+            return bestTarget;
+
         uint16_t localPlayerId = SAMP::GetLocalPlayerId();
         float localPos[3] = { 0.0f, 0.0f, 0.0f };
         SAMP::GetLocalPlayerPosition(localPos);
+
+        int maxPlayerId = SAMP::GetLargestPlayerId();
+        uintptr_t isListedOffset = SAMP::GetIsListedOffset();
 
         float bestMetric = 999999.0f;
 
         // Mapeamento dos ossos reais do GTA San Andreas 1.0 US
         int configuredBone = config.bone;
-        if (g_MenuState.legitBot.preferBodyAim && configuredBone == 0)
+        if (!isRage && g_MenuState.legitBot.preferBodyAim && configuredBone == 0)
         {
-            // Se preferBodyAim estiver ativo e a arma configurada para HEAD, prefere CHEST
+            // Se preferBodyAim estiver ativo no LegitBot e a arma configurada para HEAD, prefere CHEST
             configuredBone = 2;
         }
 
@@ -62,16 +69,27 @@ namespace TargetSelector
             break;
         }
 
-        for (int i = 0; i < 1004; i++)
+        for (int i = 0; i <= maxPlayerId; i++)
         {
             if (i == localPlayerId)
+                continue;
+
+            // Checagem inline ultra-rápida de slot preenchido antes de qualquer chamada
+            int isListed = 0;
+            __try
+            {
+                isListed = *reinterpret_cast<int*>(pPlayerPool + isListedOffset + i * 4);
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER) { isListed = 0; }
+
+            if (isListed != 1)
                 continue;
 
             if (config.teamCheck && SAMP::IsTeammate(i))
                 continue;
 
             SAMP::RemotePlayerData player;
-            if (!SAMP::GetRemotePlayer(i, player) || !player.isValid)
+            if (!SAMP::GetRemotePlayer(i, player, pPlayerPool) || !player.isValid)
                 continue;
 
             if (!player.isStreamed || !player.pGtaPed)
@@ -99,7 +117,7 @@ namespace TargetSelector
             int effectiveBoneId = targetBoneId;
             const char* effectiveBoneName = targetBoneName;
 
-            if (g_MenuState.legitBot.ignoreLimbs && player.pGtaPed)
+            if (!isRage && g_MenuState.legitBot.ignoreLimbs && player.pGtaPed)
             {
                 float* pVelX = reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(player.pGtaPed) + 0x44);
                 float* pVelY = reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(player.pGtaPed) + 0x48);

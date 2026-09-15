@@ -25,21 +25,16 @@ static D3DPRESENT_PARAMETERS    g_d3dpp = {};
 
 bool CreateDeviceD3D(HWND hWnd)
 {
-    FILE* logF = fopen("loader_debug.log", "a");
     if ((g_pD3D = Direct3DCreate9(D3D_SDK_VERSION)) == NULL)
-    {
-        if (logF) { fprintf(logF, "Direct3DCreate9 returned NULL!\n"); fclose(logF); }
         return false;
-    }
-    if (logF) { fprintf(logF, "Direct3DCreate9 OK: %p\n", g_pD3D); }
 
     D3DFORMAT formats[] = { D3DFMT_A8R8G8B8, D3DFMT_UNKNOWN, D3DFMT_X8R8G8B8, D3DFMT_R5G6B5 };
     DWORD vpTypes[] = { D3DCREATE_HARDWARE_VERTEXPROCESSING, D3DCREATE_SOFTWARE_VERTEXPROCESSING, D3DCREATE_MIXED_VERTEXPROCESSING };
 
     RECT rc;
     GetClientRect(hWnd, &rc);
-    UINT width = (rc.right - rc.left > 0) ? (rc.right - rc.left) : 538;
-    UINT height = (rc.bottom - rc.top > 0) ? (rc.bottom - rc.top) : 336;
+    UINT width = (rc.right - rc.left > 0) ? (rc.right - rc.left) : 580;
+    UINT height = (rc.bottom - rc.top > 0) ? (rc.bottom - rc.top) : 500;
 
     for (D3DFORMAT fmt : formats)
     {
@@ -57,18 +52,11 @@ bool CreateDeviceD3D(HWND hWnd)
 
             HRESULT hr = g_pD3D->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hWnd, vp, &g_d3dpp, &g_pd3dDevice);
             if (SUCCEEDED(hr))
-            {
-                if (logF) { fprintf(logF, "CreateDevice SUCCESS: fmt=%d, vp=0x%X, Device=%p\n", fmt, vp, g_pd3dDevice); fclose(logF); }
                 return true;
-            }
-            else
-            {
-                if (logF) { fprintf(logF, "Attempt fmt=%d, vp=0x%X, w=%d, h=%d -> hr=0x%08X\n", fmt, vp, width, height, hr); fflush(logF); }
-            }
         }
     }
 
-    // Tenta também com BackBufferWidth = 0 e BackBufferHeight = 0
+    // Fallback de segurança com dimensões zeradas
     ZeroMemory(&g_d3dpp, sizeof(g_d3dpp));
     g_d3dpp.Windowed = TRUE;
     g_d3dpp.SwapEffect = D3DSWAPEFFECT_DISCARD;
@@ -79,12 +67,8 @@ bool CreateDeviceD3D(HWND hWnd)
 
     HRESULT hr = g_pD3D->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hWnd, D3DCREATE_SOFTWARE_VERTEXPROCESSING, &g_d3dpp, &g_pd3dDevice);
     if (SUCCEEDED(hr))
-    {
-        if (logF) { fprintf(logF, "CreateDevice SUCCESS: SW VP zero-size, Device=%p\n", g_pd3dDevice); fclose(logF); }
         return true;
-    }
 
-    if (logF) { fprintf(logF, "All CreateDevice attempts failed! Zero-size hr=0x%08X\n", hr); fclose(logF); }
     return false;
 }
 
@@ -118,7 +102,7 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
             g_d3dpp.BackBufferHeight = HIWORD(lParam);
             ResetDevice();
 
-            HRGN hRgn = CreateRoundRectRgn(0, 0, LOWORD(lParam) + 1, HIWORD(lParam) + 1, 14, 14);
+            HRGN hRgn = CreateRoundRectRgn(0, 0, LOWORD(lParam) + 1, HIWORD(lParam) + 1, 18, 18);
             SetWindowRgn(hWnd, hRgn, TRUE);
         }
         return 0;
@@ -135,9 +119,9 @@ LRESULT WINAPI WndProc(HWND hWnd, UINT msg, WPARAM wParam, LPARAM lParam)
 
 int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine, int nCmdShow)
 {
-    // Dimensões unificadas e elegantes da Janela
-    const int windowWidth = 560;
-    const int windowHeight = 400;
+    // Dimensões unificadas e elegantes da Janela (proporção ampliada)
+    const int windowWidth = 580;
+    const int windowHeight = 500;
 
     // Registra classe da janela
     WNDCLASSEX wc = { sizeof(WNDCLASSEX), CS_CLASSDC, WndProc, 0L, 0L, hInstance, NULL, NULL, NULL, NULL, _T("SomaliaLoaderClass"), NULL };
@@ -152,7 +136,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     HWND hWnd = CreateWindowEx(
         WS_EX_APPWINDOW,
         wc.lpszClassName,
-        _T("Somalia Group"),
+        _T("Somalia Client"),
         WS_POPUP | WS_MINIMIZEBOX | WS_VISIBLE,
         posX, posY, windowWidth, windowHeight,
         NULL, NULL, wc.hInstance, NULL
@@ -179,7 +163,7 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     UpdateWindow(hWnd);
 
     // Cantos arredondados aplicados na janela Win32
-    HRGN hRgn = CreateRoundRectRgn(0, 0, windowWidth + 1, windowHeight + 1, 14, 14);
+    HRGN hRgn = CreateRoundRectRgn(0, 0, windowWidth + 1, windowHeight + 1, 18, 18);
     SetWindowRgn(hWnd, hRgn, TRUE);
 
     // Inicializa ImGui
@@ -190,10 +174,10 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     ImGui::StyleColorsDark();
     ImGuiStyle& style = ImGui::GetStyle();
-    style.WindowRounding = 8.0f;
-    style.FrameRounding = 5.0f;
-    style.ChildRounding = 6.0f;
-    style.PopupRounding = 4.0f;
+    style.WindowRounding = 14.0f;
+    style.FrameRounding = 8.0f;
+    style.ChildRounding = 8.0f;
+    style.PopupRounding = 8.0f;
     style.ScrollbarRounding = 4.0f;
     style.WindowBorderSize = 0.0f;
     style.FrameBorderSize = 0.0f;
@@ -207,9 +191,9 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
     style.Colors[ImGuiCol_HeaderHovered]    = ImVec4(accentColor.x, accentColor.y, accentColor.z, 0.55f);
     style.Colors[ImGuiCol_HeaderActive]     = ImVec4(accentColor.x, accentColor.y, accentColor.z, 0.75f);
     style.Colors[ImGuiCol_ButtonActive]     = ImVec4(accentColor.x, accentColor.y, accentColor.z, 0.65f);
-    style.Colors[ImGuiCol_FrameBg]          = ImVec4(16.f / 255.f, 18.f / 255.f, 26.f / 255.f, 1.0f);
-    style.Colors[ImGuiCol_FrameBgHovered]   = ImVec4(24.f / 255.f, 28.f / 255.f, 40.f / 255.f, 1.0f);
-    style.Colors[ImGuiCol_FrameBgActive]    = ImVec4(30.f / 255.f, 36.f / 255.f, 52.f / 255.f, 1.0f);
+    style.Colors[ImGuiCol_FrameBg]          = ImVec4(27.f / 255.f, 28.f / 255.f, 32.f / 255.f, 1.0f);
+    style.Colors[ImGuiCol_FrameBgHovered]   = ImVec4(35.f / 255.f, 37.f / 255.f, 43.f / 255.f, 1.0f);
+    style.Colors[ImGuiCol_FrameBgActive]    = ImVec4(40.f / 255.f, 42.f / 255.f, 50.f / 255.f, 1.0f);
 
     // Registra fontes customizadas (titulo grande, etc)
     LoaderMenu::SetupFonts();
@@ -219,6 +203,13 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
 
     // Inicializa telas e modulos do loader
     LoaderMenu::Init(hWnd, g_pd3dDevice);
+
+    if (strstr(lpCmdLine, "--screen register"))
+        LoaderMenu::SetCurrentScreen(LoaderMenu::Screen::Register);
+    else if (strstr(lpCmdLine, "--screen dashboard"))
+        LoaderMenu::SetCurrentScreen(LoaderMenu::Screen::Dashboard);
+    else if (strstr(lpCmdLine, "--screen loading"))
+        LoaderMenu::SetCurrentScreen(LoaderMenu::Screen::Loading);
 
     // Loop de Mensagens Principal
     bool bRunning = true;
@@ -234,6 +225,26 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             continue;
         }
 
+        // Se a janela estiver minimizada, cede a CPU/GPU e evita concorrência
+        if (IsIconic(hWnd))
+        {
+            Sleep(25);
+            continue;
+        }
+
+        // Trata perda de dispositivo antes da renderização para não colidir com o contexto D3D9 do GTA
+        HRESULT hrCoop = g_pd3dDevice->TestCooperativeLevel();
+        if (hrCoop == D3DERR_DEVICELOST)
+        {
+            // O contexto de vídeo pertence a outro aplicativo exclusivo (ex: GTA SA em tela cheia)
+            Sleep(25);
+            continue;
+        }
+        else if (hrCoop == D3DERR_DEVICENOTRESET)
+        {
+            ResetDevice();
+        }
+
         ImGui_ImplDX9_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
@@ -241,8 +252,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         // Renderiza interface
         LoaderMenu::Render();
 
-        // Movimentação da janela clicando em qualquer espaço vazio do fundo (após os itens da UI serem registrados)
-        if (ImGui::IsMouseClicked(0) && !ImGui::IsAnyItemHovered() && !ImGui::IsAnyItemActive())
+        // Movimentação da janela clicando em qualquer espaço vazio do fundo (protegendo a área do rodapé e controles)
+        if (ImGui::IsMouseClicked(0) && !ImGui::IsAnyItemHovered() && !ImGui::IsAnyItemActive() && ImGui::GetMousePos().y < 430.0f)
         {
             ReleaseCapture();
             SendMessageA(hWnd, WM_NCLBUTTONDOWN, HTCAPTION, 0);
@@ -253,8 +264,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         g_pd3dDevice->SetRenderState(D3DRS_ALPHABLENDENABLE, FALSE);
         g_pd3dDevice->SetRenderState(D3DRS_SCISSORTESTENABLE, FALSE);
 
-        D3DCOLOR clearColor = D3DCOLOR_RGBA(26, 26, 26, 255);
-        g_pd3dDevice->Clear(0, NULL, D3DCLEAR_TARGET | D3DCLEAR_ZBUFFER, clearColor, 1.0f, 0);
+        D3DCOLOR clearColor = D3DCOLOR_RGBA(19, 20, 23, 255);
+        g_pd3dDevice->Clear(0, NULL, D3DCLEAR_TARGET, clearColor, 1.0f, 0);
 
         if (g_pd3dDevice->BeginScene() >= 0)
         {
@@ -264,8 +275,71 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         }
 
         HRESULT result = g_pd3dDevice->Present(NULL, NULL, NULL, NULL);
-        if (result == D3DERR_DEVICELOST && g_pd3dDevice->TestCooperativeLevel() == D3DERR_DEVICENOTRESET)
-            ResetDevice();
+        if (result == D3DERR_DEVICELOST)
+        {
+            if (g_pd3dDevice->TestCooperativeLevel() == D3DERR_DEVICENOTRESET)
+                ResetDevice();
+        }
+
+        static int s_ScreenshotFrame = 0;
+        if (strstr(lpCmdLine, "--screenshot"))
+        {
+            s_ScreenshotFrame++;
+            if (s_ScreenshotFrame >= 20)
+            {
+                IDirect3DSurface9* pBackBuffer = NULL;
+                if (SUCCEEDED(g_pd3dDevice->GetBackBuffer(0, 0, D3DBACKBUFFER_TYPE_MONO, &pBackBuffer)))
+                {
+                    D3DSURFACE_DESC desc;
+                    pBackBuffer->GetDesc(&desc);
+                    IDirect3DSurface9* pDestSurface = NULL;
+                    if (SUCCEEDED(g_pd3dDevice->CreateOffscreenPlainSurface(desc.Width, desc.Height, desc.Format, D3DPOOL_SYSTEMMEM, &pDestSurface, NULL)))
+                    {
+                        if (SUCCEEDED(g_pd3dDevice->GetRenderTargetData(pBackBuffer, pDestSurface)))
+                        {
+                            D3DLOCKED_RECT locked;
+                            if (SUCCEEDED(pDestSurface->LockRect(&locked, NULL, D3DLOCK_READONLY)))
+                            {
+                                BITMAPFILEHEADER bfh = { 0 };
+                                BITMAPINFOHEADER bih = { 0 };
+                                bfh.bfType = 0x4D42;
+                                bfh.bfOffBits = sizeof(BITMAPFILEHEADER) + sizeof(BITMAPINFOHEADER);
+                                bih.biSize = sizeof(BITMAPINFOHEADER);
+                                bih.biWidth = desc.Width;
+                                bih.biHeight = desc.Height;
+                                bih.biPlanes = 1;
+                                bih.biBitCount = 32;
+                                bih.biCompression = BI_RGB;
+                                bih.biSizeImage = desc.Width * desc.Height * 4;
+                                bfh.bfSize = bfh.bfOffBits + bih.biSizeImage;
+
+                                char shotName[64] = "loader_render.bmp";
+                                if (strstr(lpCmdLine, "--screen register")) strcpy_s(shotName, "loader_register.bmp");
+                                else if (strstr(lpCmdLine, "--screen dashboard")) strcpy_s(shotName, "loader_dashboard.bmp");
+                                else if (strstr(lpCmdLine, "--screen loading")) strcpy_s(shotName, "loader_loading.bmp");
+
+                                FILE* f = fopen(shotName, "wb");
+                                if (f)
+                                {
+                                    fwrite(&bfh, sizeof(bfh), 1, f);
+                                    fwrite(&bih, sizeof(bih), 1, f);
+                                    for (int y = (int)desc.Height - 1; y >= 0; y--)
+                                    {
+                                        BYTE* row = (BYTE*)locked.pBits + y * locked.Pitch;
+                                        fwrite(row, desc.Width * 4, 1, f);
+                                    }
+                                    fclose(f);
+                                }
+                                pDestSurface->UnlockRect();
+                            }
+                        }
+                        pDestSurface->Release();
+                    }
+                    pBackBuffer->Release();
+                }
+                bRunning = false;
+            }
+        }
 
         // Limita a taxa de quadros para poupar CPU quando em repouso
         Sleep(10);

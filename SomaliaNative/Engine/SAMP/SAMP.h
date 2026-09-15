@@ -44,10 +44,13 @@ namespace SAMP
     uintptr_t GetLocalPlayer();
     uintptr_t GetLocalPlayerOnFootData();
 
-    bool GetRemotePlayer(int index, RemotePlayerData& outData);
+    uintptr_t GetIsListedOffset();
+    int GetLargestPlayerId();
+    bool GetRemotePlayer(int index, RemotePlayerData& outData, uintptr_t pPlayerPool = 0);
     bool GetLocalPlayerPosition(float outPos[3]);
     bool IsTeammate(int index);
     uint32_t GetLocalPlayerColor();
+    uint32_t GetPlayerColor(int playerId);
 
     enum class TeardownStatus
     {
@@ -59,6 +62,13 @@ namespace SAMP
 
     bool EnsureRakHook();
     bool IsRakHooked();
+    bool EnsureSendTakeDamageHook();
+    bool IsSendTakeDamageHooked();
+    void RestoreSendTakeDamageHook();
+    void SendGiveDamage(int targetId, float damage, int weaponId, int bodyPart);
+    bool SendBulletData(uint16_t targetId, const float origin[3], const float target[3], const float center[3], uint8_t weaponId, uint8_t hitType = 1);
+    bool SendRawPacket(const unsigned char* data, int length, int priority = 1, int reliability = 7, char orderingChannel = 0);
+    void* GetRakClient();
     TeardownStatus GetTeardownStatus();
     TeardownStatus Shutdown();
 }

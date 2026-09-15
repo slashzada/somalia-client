@@ -1,9 +1,11 @@
 #include "ESP.h"
 #include "../../Config/Config.h"
+#include "../../UI/Theme.h"
 #include "../../Engine/SAMP/SAMP.h"
 #include "../../Engine/GTA/GTA.h"
 #include "../../Core/Logger.h"
 #include "../../Core/RuntimeState.h"
+#include "../AntiAim/AntiAim.h"
 #include "../../Render/ImGui/imgui_internal.h"
 #include <stdio.h>
 #include <stdint.h>
@@ -34,6 +36,46 @@ namespace ESP
 
     // Rastreamento de vida/colete dos jogadores para detecao de acertos
     static float s_PrevHealthArmor[1004] = { 0.0f };
+
+    // FPS Counter
+    static int s_FpsCount = 0;
+    static int s_FpsDisplay = 0;
+    static ULONGLONG s_FpsLastTick = 0;
+
+    // Weapon Name Lookup (GTA SA weapon IDs)
+    static const char* GetWeaponName(uint32_t weaponId)
+    {
+        switch (weaponId)
+        {
+        case 0:  return "Fist";
+        case 1:  return "Brass Knuckles";
+        case 4:  return "Knife";
+        case 5:  return "Bat";
+        case 8:  return "Katana";
+        case 9:  return "Chainsaw";
+        case 22: return "Colt 45";
+        case 23: return "Silenced";
+        case 24: return "Deagle";
+        case 25: return "Shotgun";
+        case 26: return "Sawnoff";
+        case 27: return "SPAS-12";
+        case 28: return "Uzi";
+        case 29: return "MP5";
+        case 30: return "AK-47";
+        case 31: return "M4";
+        case 32: return "Tec-9";
+        case 33: return "Country";
+        case 34: return "Sniper";
+        case 35: return "RPG";
+        case 36: return "HS Rocket";
+        case 37: return "Flamethrower";
+        case 38: return "Minigun";
+        case 41: return "Spray Can";
+        case 42: return "Fire Ext.";
+        case 46: return "Parachute";
+        default: return nullptr;
+        }
+    }
 
     void TriggerHitmarker()
     {
@@ -97,19 +139,31 @@ namespace ESP
         float lineW = w * 0.25f;
         float lineH = h * 0.25f;
 
+        // Outline preto sutil para contraste em qualquer ambiente
+        float ot = thickness + 1.2f;
+        ImU32 shadow = IM_COL32(0, 0, 0, 200);
+
         // Top Left
+        draw->AddLine(min, ImVec2(min.x + lineW, min.y), shadow, ot);
+        draw->AddLine(min, ImVec2(min.x, min.y + lineH), shadow, ot);
         draw->AddLine(min, ImVec2(min.x + lineW, min.y), color, thickness);
         draw->AddLine(min, ImVec2(min.x, min.y + lineH), color, thickness);
 
         // Top Right
+        draw->AddLine(ImVec2(max.x, min.y), ImVec2(max.x - lineW, min.y), shadow, ot);
+        draw->AddLine(ImVec2(max.x, min.y), ImVec2(max.x, min.y + lineH), shadow, ot);
         draw->AddLine(ImVec2(max.x, min.y), ImVec2(max.x - lineW, min.y), color, thickness);
         draw->AddLine(ImVec2(max.x, min.y), ImVec2(max.x, min.y + lineH), color, thickness);
 
         // Bottom Left
+        draw->AddLine(ImVec2(min.x, max.y), ImVec2(min.x + lineW, max.y), shadow, ot);
+        draw->AddLine(ImVec2(min.x, max.y), ImVec2(min.x, max.y - lineH), shadow, ot);
         draw->AddLine(ImVec2(min.x, max.y), ImVec2(min.x + lineW, max.y), color, thickness);
         draw->AddLine(ImVec2(min.x, max.y), ImVec2(min.x, max.y - lineH), color, thickness);
 
         // Bottom Right
+        draw->AddLine(max, ImVec2(max.x - lineW, max.y), shadow, ot);
+        draw->AddLine(max, ImVec2(max.x, max.y - lineH), shadow, ot);
         draw->AddLine(max, ImVec2(max.x - lineW, max.y), color, thickness);
         draw->AddLine(max, ImVec2(max.x, max.y - lineH), color, thickness);
     }
@@ -165,6 +219,7 @@ namespace ESP
         if (!WorldToScreen(p1[0], p1[1], p1[2], s1)) return;
         if (!WorldToScreen(p2[0], p2[1], p2[2], s2)) return;
 
+        draw->AddLine(s1, s2, IM_COL32(0, 0, 0, 200), 2.2f);
         draw->AddLine(s1, s2, color, 1.2f);
     }
 
@@ -242,6 +297,28 @@ namespace ESP
 
             ++it;
         }
+    }
+
+    static ImU32 GetPlayerOrgColor(uint32_t sampColor, bool isAlly)
+    {
+        if (sampColor == 0)
+        {
+            return isAlly ? IM_COL32(100, 255, 100, 255) : IM_COL32(235, 235, 235, 255);
+        }
+
+        uint8_t r = static_cast<uint8_t>((sampColor >> 16) & 0xFF);
+        uint8_t g = static_cast<uint8_t>((sampColor >> 8) & 0xFF);
+        uint8_t b = static_cast<uint8_t>(sampColor & 0xFF);
+
+        // Se a cor for muito escura (quase preta), garante brilho mínimo para leitura no ESP
+        if (r < 60 && g < 60 && b < 60)
+        {
+            if (r < 160) r = 160;
+            if (g < 160) g = 160;
+            if (b < 160) b = 160;
+        }
+
+        return IM_COL32(r, g, b, 255);
     }
 
     static void RenderVehiclesESP(ImDrawList* draw, const float localPos[3])
@@ -409,26 +486,48 @@ namespace ESP
         ImVec2 displaySize = ImGui::GetIO().DisplaySize;
         if (displaySize.x <= 0 || displaySize.y <= 0) return;
 
-        ImVec2 screenCenter(displaySize.x * 0.5f, displaySize.y * 0.5f);
+        ImVec2 screenCenter = GTA::GetCrosshairScreenPos();
         ULONGLONG currentTick = GetTickCount64();
 
-        // 1. Render FOV Circle
-        if (g_MenuState.visuals.drawFOVCircle)
+        // 1. Render FOV Circle (somente com menu fechado para nao atravessar a UI)
+        if (g_MenuState.visuals.drawFOVCircle && !g_MenuState.menuOpen)
         {
             float radius = static_cast<float>(g_MenuState.visuals.fovCircleRadius) * 4.0f;
-            draw->AddCircle(screenCenter, radius, IM_COL32(137, 207, 240, 180), 64, 1.2f);
+            draw->AddCircle(screenCenter, radius, IM_COL32(int(accent_colour[0] * 255), int(accent_colour[1] * 255), int(accent_colour[2] * 255), 180), 64, 1.2f);
         }
 
-        // 1.1 Custom Screen Crosshair
-        if (g_MenuState.visuals.customCrosshair)
+        // 1.1 Custom Screen Crosshair (somente com menu fechado)
+        if (g_MenuState.visuals.customCrosshair && !g_MenuState.menuOpen)
         {
             float crossLen = 6.0f;
             float crossGap = 3.0f;
             draw->AddCircleFilled(screenCenter, 1.5f, IM_COL32(255, 60, 90, 255));
             draw->AddLine(ImVec2(screenCenter.x - crossGap - crossLen, screenCenter.y), ImVec2(screenCenter.x - crossGap, screenCenter.y), IM_COL32(255, 60, 90, 240), 1.5f);
             draw->AddLine(ImVec2(screenCenter.x + crossGap, screenCenter.y), ImVec2(screenCenter.x + crossGap + crossLen, screenCenter.y), IM_COL32(255, 60, 90, 240), 1.5f);
-            draw->AddLine(ImVec2(screenCenter.x - crossGap - crossLen, screenCenter.y), ImVec2(screenCenter.x - crossGap, screenCenter.y), IM_COL32(255, 60, 90, 240), 1.5f);
-            draw->AddLine(ImVec2(screenCenter.x + crossGap, screenCenter.y), ImVec2(screenCenter.x + crossGap + crossLen, screenCenter.y), IM_COL32(255, 60, 90, 240), 1.5f);
+            draw->AddLine(ImVec2(screenCenter.x, screenCenter.y - crossGap - crossLen), ImVec2(screenCenter.x, screenCenter.y - crossGap), IM_COL32(255, 60, 90, 240), 1.5f);
+            draw->AddLine(ImVec2(screenCenter.x, screenCenter.y + crossGap), ImVec2(screenCenter.x, screenCenter.y + crossGap + crossLen), IM_COL32(255, 60, 90, 240), 1.5f);
+        }
+
+        // 1.15 Show FPS / Ping Overlay
+        float hudY = 20.0f;
+        if (g_MenuState.visuals.showFPS)
+        {
+            s_FpsCount++;
+            if (currentTick - s_FpsLastTick >= 1000)
+            {
+                s_FpsDisplay = s_FpsCount;
+                s_FpsCount = 0;
+                s_FpsLastTick = currentTick;
+            }
+
+            char fpsBuf[64];
+            snprintf(fpsBuf, sizeof(fpsBuf), "FPS: %d", s_FpsDisplay);
+            ImVec2 fpsSz = ImGui::CalcTextSize(fpsBuf);
+            float fpsPadX = 8.0f, fpsPadY = 4.0f;
+            draw->AddRectFilled(ImVec2(20, hudY), ImVec2(20 + fpsSz.x + fpsPadX * 2, hudY + fpsSz.y + fpsPadY * 2), IM_COL32(15, 15, 20, 200), 4.0f);
+            draw->AddRect(ImVec2(20, hudY), ImVec2(20 + fpsSz.x + fpsPadX * 2, hudY + fpsSz.y + fpsPadY * 2), IM_COL32(50, 50, 60, 200), 4.0f);
+            draw->AddText(ImVec2(20 + fpsPadX, hudY + fpsPadY), IM_COL32(255, 255, 255, 230), fpsBuf);
+            hudY += fpsSz.y + fpsPadY * 2 + 6.0f;
         }
 
         // 1.2 Hitmarker on Damage
@@ -446,9 +545,63 @@ namespace ESP
         // 1.4 Indicador Invertebred em Execucao
         if (g_MenuState.antiAim.invertebred)
         {
-            draw->AddRectFilled(ImVec2(20, 20), ImVec2(195, 46), IM_COL32(20, 20, 20, 210), 4.0f);
-            draw->AddRect(ImVec2(20, 20), ImVec2(195, 46), IM_COL32(137, 207, 240, 220), 4.0f, 0, 1.2f);
-            draw->AddText(ImVec2(28, 26), IM_COL32(137, 207, 240, 255), "INVERTEBRED: ATIVO");
+            float cardW = 215.0f, cardH = 26.0f;
+            draw->AddRectFilled(ImVec2(20, hudY), ImVec2(20 + cardW, hudY + cardH), IM_COL32(20, 20, 20, 215), 4.0f);
+            draw->AddRect(ImVec2(20, hudY), ImVec2(20 + cardW, hudY + cardH), IM_COL32(int(accent_colour[0] * 255), int(accent_colour[1] * 255), int(accent_colour[2] * 255), 220), 4.0f, 0, 1.2f);
+            draw->AddText(ImVec2(28, hudY + 5), IM_COL32(int(accent_colour[0] * 255), int(accent_colour[1] * 255), int(accent_colour[2] * 255), 255), "INVERTEBRED: ATIVO (TWIST)");
+            hudY += cardH + 6.0f;
+        }
+
+        // 1.45 Indicador Desync Angles em Execucao
+        if (g_MenuState.antiAim.desync || (g_MenuState.antiAim.enabled && AntiAim::IsActive()))
+        {
+            float realAng = AntiAim::GetRealAngle();
+            float fakeAng = AntiAim::GetFakeAngle();
+            float delta = fabsf(fakeAng - realAng);
+            if (delta > 180.0f) delta = 360.0f - delta;
+
+            char desyncBuf[128];
+            snprintf(desyncBuf, sizeof(desyncBuf), "DESYNC ANGLES: ATIVO (R: %.0f | F: %.0f | D: %.0f)", realAng, fakeAng, delta);
+            ImVec2 txtSz = ImGui::CalcTextSize(desyncBuf);
+            float cardW = txtSz.x + 18.0f;
+            float cardH = 26.0f;
+
+            draw->AddRectFilled(ImVec2(20, hudY), ImVec2(20 + cardW, hudY + cardH), IM_COL32(20, 20, 20, 215), 4.0f);
+            draw->AddRect(ImVec2(20, hudY), ImVec2(20 + cardW, hudY + cardH), IM_COL32(255, 165, 0, 220), 4.0f, 0, 1.2f);
+            draw->AddText(ImVec2(28, hudY + 5), IM_COL32(255, 200, 50, 255), desyncBuf);
+            hudY += cardH + 6.0f;
+        }
+
+        // 1.46 Visualizador 3D de Desync no chão sob o jogador local (Terceira Pessoa)
+        if (RuntimeState::IsPlayerAlive() && (g_MenuState.antiAim.desync || (g_MenuState.antiAim.enabled && AntiAim::IsActive())))
+        {
+            float localPos[3] = { 0 };
+            if (SAMP::GetLocalPlayerPosition(localPos))
+            {
+                float realRad = AntiAim::GetRealAngle() * (3.14159265f / 180.0f);
+                float fakeRad = AntiAim::GetFakeAngle() * (3.14159265f / 180.0f);
+
+                float origin3D[3] = { localPos[0], localPos[1], localPos[2] - 0.95f };
+                // Vetor Real (Verde): onde o jogador realmente está olhando
+                float realTip3D[3] = { origin3D[0] - sinf(realRad) * 1.2f, origin3D[1] + cosf(realRad) * 1.2f, origin3D[2] };
+                // Vetor Fake / Desync (Laranja): o que o servidor e inimigos vêem
+                float fakeTip3D[3] = { origin3D[0] - sinf(fakeRad) * 1.2f, origin3D[1] + cosf(fakeRad) * 1.2f, origin3D[2] };
+
+                ImVec2 originScr, realScr, fakeScr;
+                if (WorldToScreen(origin3D[0], origin3D[1], origin3D[2], originScr))
+                {
+                    if (WorldToScreen(realTip3D[0], realTip3D[1], realTip3D[2], realScr))
+                    {
+                        draw->AddLine(originScr, realScr, IM_COL32(50, 255, 50, 220), 2.5f);
+                        draw->AddCircleFilled(realScr, 3.5f, IM_COL32(50, 255, 50, 255));
+                    }
+                    if (WorldToScreen(fakeTip3D[0], fakeTip3D[1], fakeTip3D[2], fakeScr))
+                    {
+                        draw->AddLine(originScr, fakeScr, IM_COL32(255, 140, 0, 220), 2.5f);
+                        draw->AddCircleFilled(fakeScr, 3.5f, IM_COL32(255, 140, 0, 255));
+                    }
+                }
+            }
         }
 
         // 2. Se o Master ESP estiver desligado, encerra o ciclo
@@ -593,7 +746,9 @@ namespace ESP
             ImVec2 boxMin(headScreen.x - width * 0.5f, headScreen.y);
             ImVec2 boxMax(headScreen.x + width * 0.5f, feetScreen.y);
 
-            ImU32 boxColor = IM_COL32(255, 255, 255, 240);
+            bool isAlly = SAMP::IsTeammate(i);
+            ImU32 orgColor = GetPlayerOrgColor(player.color, isAlly);
+            ImU32 boxColor = orgColor;
 
             // A. 2D Box / Corner Box
             if (g_MenuState.visuals.boxESP)
@@ -622,7 +777,7 @@ namespace ESP
                 DrawArmorBar(draw, boxMin, boxMax, player.armor, 100.0f);
             }
 
-            // D. Player Name & ID
+            // D. Player Name & ID (Colorido com a cor da Organizacao / Faccao)
             if (g_MenuState.visuals.nameESP)
             {
                 char nameBuf[64];
@@ -634,8 +789,14 @@ namespace ESP
                 ImVec2 textSize = ImGui::CalcTextSize(nameBuf);
                 ImVec2 textPos(headScreen.x - textSize.x * 0.5f, boxMin.y - textSize.y - 2.0f);
 
-                draw->AddText(ImVec2(textPos.x + 1, textPos.y + 1), IM_COL32(0, 0, 0, 255), nameBuf);
-                draw->AddText(textPos, IM_COL32(255, 255, 255, 255), nameBuf);
+                // Contorno 4-direcional preto para contraste maximo em qualquer fundo
+                draw->AddText(ImVec2(textPos.x + 1, textPos.y), IM_COL32(0, 0, 0, 255), nameBuf);
+                draw->AddText(ImVec2(textPos.x - 1, textPos.y), IM_COL32(0, 0, 0, 255), nameBuf);
+                draw->AddText(ImVec2(textPos.x, textPos.y + 1), IM_COL32(0, 0, 0, 255), nameBuf);
+                draw->AddText(ImVec2(textPos.x, textPos.y - 1), IM_COL32(0, 0, 0, 255), nameBuf);
+
+                // Nome com a cor oficial da organizacao
+                draw->AddText(textPos, orgColor, nameBuf);
             }
 
             // E. Distance Tag
@@ -651,10 +812,46 @@ namespace ESP
                 draw->AddText(distPos, IM_COL32(210, 210, 210, 255), distBuf);
             }
 
+            // E2. Weapon Name ESP
+            if (g_MenuState.visuals.weaponESP && player.pGtaPed != nullptr)
+            {
+                __try
+                {
+                    uintptr_t pedA = reinterpret_cast<uintptr_t>(player.pGtaPed);
+                    uint8_t slot = *reinterpret_cast<uint8_t*>(pedA + 0x718);
+                    uintptr_t weapPtr = pedA + 0x5A0 + slot * 0x1C;
+                    uint32_t weapType = *reinterpret_cast<uint32_t*>(weapPtr);
+
+                    if (weapType > 0)
+                    {
+                        const char* weapName = GetWeaponName(weapType);
+                        char weapBuf[32];
+                        if (weapName)
+                            snprintf(weapBuf, sizeof(weapBuf), "%s", weapName);
+                        else
+                            snprintf(weapBuf, sizeof(weapBuf), "Weapon [%d]", weapType);
+
+                        ImVec2 wSz = ImGui::CalcTextSize(weapBuf);
+                        float weapY = boxMax.y + 2.0f;
+                        if (g_MenuState.visuals.distanceESP)
+                        {
+                            char tmpDist[32];
+                            snprintf(tmpDist, sizeof(tmpDist), "%.1f m", distance);
+                            weapY += ImGui::CalcTextSize(tmpDist).y + 2.0f;
+                        }
+                        ImVec2 wPos(headScreen.x - wSz.x * 0.5f, weapY);
+
+                        draw->AddText(ImVec2(wPos.x + 1, wPos.y + 1), IM_COL32(0, 0, 0, 255), weapBuf);
+                        draw->AddText(wPos, IM_COL32(255, 180, 60, 230), weapBuf);
+                    }
+                }
+                __except (EXCEPTION_EXECUTE_HANDLER) {}
+            }
+
             // F. Skeleton / Bones
             if (g_MenuState.visuals.bonesESP && player.pGtaPed != nullptr)
             {
-                DrawSkeleton(draw, player.pGtaPed, IM_COL32(240, 240, 240, 220));
+                DrawSkeleton(draw, player.pGtaPed, orgColor);
             }
 
             // G. Snaplines
@@ -663,10 +860,116 @@ namespace ESP
                 ImVec2 lineOrigin = (g_MenuState.visuals.snaplineOrigin == 0) ?
                     ImVec2(screenCenter.x, displaySize.y) : screenCenter;
 
-                draw->AddLine(lineOrigin, feetScreen, IM_COL32(137, 207, 240, 180), 1.0f);
+                draw->AddLine(lineOrigin, feetScreen, IM_COL32(int(accent_colour[0] * 255), int(accent_colour[1] * 255), int(accent_colour[2] * 255), 180), 1.0f);
+            }
+
+            // H. Line of Sight (Look Direction)
+            if (g_MenuState.visuals.lineOfSight && player.pGtaPed != nullptr)
+            {
+                __try
+                {
+                    uintptr_t pedA = reinterpret_cast<uintptr_t>(player.pGtaPed);
+                    uintptr_t pMatrix = *reinterpret_cast<uintptr_t*>(pedA + 0x14);
+                    if (pMatrix)
+                    {
+                        float fwdX = *reinterpret_cast<float*>(pMatrix + 0x10);
+                        float fwdY = *reinterpret_cast<float*>(pMatrix + 0x14);
+
+                        float losEndX = head3D[0] + fwdX * 5.0f;
+                        float losEndY = head3D[1] + fwdY * 5.0f;
+                        float losEndZ = head3D[2];
+
+                        ImVec2 losScreen;
+                        if (WorldToScreen(losEndX, losEndY, losEndZ, losScreen))
+                        {
+                            draw->AddLine(headScreen, losScreen, IM_COL32(255, 255, 0, 120), 1.0f);
+                        }
+                    }
+                }
+                __except (EXCEPTION_EXECUTE_HANDLER) {}
+            }
+
+            // I. Target Highlight (Pulsing glow on closest-to-crosshair player)
+            if (g_MenuState.visuals.targetHighlight)
+            {
+                float dxCross = headScreen.x - screenCenter.x;
+                float dyCross = headScreen.y - screenCenter.y;
+                float crossDist = sqrtf(dxCross * dxCross + dyCross * dyCross);
+                float fovRadius = static_cast<float>(g_MenuState.visuals.fovCircleRadius) * 4.0f;
+
+                if (crossDist <= fovRadius)
+                {
+                    float pulse = (sinf(static_cast<float>(currentTick) * 0.005f) + 1.0f) * 0.5f;
+                    int pulseAlpha = static_cast<int>(40.0f + pulse * 50.0f);
+                    draw->AddRectFilled(ImVec2(boxMin.x - 2, boxMin.y - 2), ImVec2(boxMax.x + 2, boxMax.y + 2), IM_COL32(255, 200, 60, pulseAlpha), 2.0f);
+                }
             }
 
             countDrawn++;
+        }
+
+        // J. Off-screen Arrows (rendered after main loop for players NOT on screen)
+        if (g_MenuState.visuals.offscreenArrows && SAMP::IsLoaded() && RuntimeState::IsPlayerAlive())
+        {
+            float arrowMargin = 30.0f;
+            float arrowSize = 10.0f;
+            uint16_t localId = SAMP::GetLocalPlayerId();
+
+            for (int i = 0; i < 1004; i++)
+            {
+                if (i == localId) continue;
+
+                SAMP::RemotePlayerData rp;
+                if (!SAMP::GetRemotePlayer(i, rp) || !rp.isValid || !rp.isStreamed) continue;
+                if (g_MenuState.visuals.enemyOnly && SAMP::IsTeammate(i)) continue;
+
+                float dx = rp.position[0] - localPos[0];
+                float dy = rp.position[1] - localPos[1];
+                float dist = sqrtf(dx * dx + dy * dy);
+                if (dist > static_cast<float>(g_MenuState.visuals.maxDistance)) continue;
+
+                ImVec2 testScreen;
+                if (WorldToScreen(rp.position[0], rp.position[1], rp.position[2], testScreen))
+                {
+                    if (testScreen.x >= 0 && testScreen.x <= displaySize.x && testScreen.y >= 0 && testScreen.y <= displaySize.y)
+                        continue; // On screen, skip
+                }
+
+                // Calculate direction from center to target
+                float dirX = rp.position[0] - localPos[0];
+                float dirY = rp.position[1] - localPos[1];
+                float angle = atan2f(dirY, dirX);
+
+                // Project arrow position at screen edge
+                float halfW = displaySize.x * 0.5f - arrowMargin;
+                float halfH = displaySize.y * 0.5f - arrowMargin;
+
+                float cosA = cosf(angle);
+                float sinA = sinf(angle);
+
+                float scale = 99999.0f;
+                if (fabsf(cosA) > 0.001f)
+                    scale = ImMin(scale, halfW / fabsf(cosA));
+                if (fabsf(sinA) > 0.001f)
+                    scale = ImMin(scale, halfH / fabsf(sinA));
+
+                float arrowX = screenCenter.x + cosA * scale;
+                float arrowY = screenCenter.y - sinA * scale;
+
+                arrowX = ImClamp(arrowX, arrowMargin, displaySize.x - arrowMargin);
+                arrowY = ImClamp(arrowY, arrowMargin, displaySize.y - arrowMargin);
+
+                // Draw triangle arrow pointing toward enemy
+                float perpX = -sinA;
+                float perpY = cosA;
+                ImVec2 tip(arrowX + cosA * arrowSize, arrowY - sinA * arrowSize);
+                ImVec2 left(arrowX + perpX * arrowSize * 0.5f, arrowY - perpY * arrowSize * 0.5f);
+                ImVec2 right(arrowX - perpX * arrowSize * 0.5f, arrowY + perpY * arrowSize * 0.5f);
+
+                bool isAllyOff = SAMP::IsTeammate(i);
+                ImU32 arrowCol = (GetPlayerOrgColor(rp.color, isAllyOff) & 0x00FFFFFF) | 0xC8000000;
+                draw->AddTriangleFilled(tip, left, right, arrowCol);
+            }
         }
 
         if (shouldLog)

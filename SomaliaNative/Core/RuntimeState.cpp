@@ -5,7 +5,10 @@
 #include "../Features/Aimbot/Aimbot.h"
 #include "../Features/Aimbot/AimAssist.h"
 #include "../Features/Aimbot/RageBot.h"
-#include "../Features/Slide/Slide.h"
+#include "../Features/SilentAim/SilentAim.h"
+#include "../Features/KFCSlide/KFCSlide.h"
+#include "../Features/AutoSlide/AutoSlide.h"
+#include "../Features/AutoPunch/AutoPunch.h"
 #include "../Features/AntiAim/AntiAim.h"
 #include "../Features/LocalMods/LocalMods.h"
 
@@ -54,11 +57,14 @@ namespace RuntimeState
     bool IsValidPed(void* pPed)
     {
         if (!pPed) return false;
+        uintptr_t addr = reinterpret_cast<uintptr_t>(pPed);
+        if (addr < 0x10000 || addr > 0x7FFE0000) return false;
+
         __try
         {
-            if (IsBadReadPtr(pPed, 0x600)) return false;
             void* vtable = *reinterpret_cast<void**>(pPed);
-            if (!vtable || IsBadReadPtr(vtable, sizeof(void*))) return false;
+            uintptr_t vtAddr = reinterpret_cast<uintptr_t>(vtable);
+            if (vtAddr < 0x10000 || vtAddr > 0x7FFE0000) return false;
             return true;
         }
         __except (EXCEPTION_EXECUTE_HANDLER)
@@ -72,7 +78,7 @@ namespace RuntimeState
         __try
         {
             void** ppLocal = reinterpret_cast<void**>(0x00B7CD98);
-            if (!ppLocal || IsBadReadPtr(ppLocal, sizeof(void*))) return nullptr;
+            if (!ppLocal) return nullptr;
             void* pPed = *ppLocal;
             if (!IsValidPed(pPed)) return nullptr;
             return pPed;
@@ -168,9 +174,12 @@ namespace RuntimeState
         Logger::Log("[SOMALIA][LIFECYCLE] Executando limpeza de morte: resetando todos os modulos de combate.");
         Aimbot::ClearTarget();
         AimAssist::Reset();
-        AimAssist::ResetSilentDiagnostic();
+        SilentAim::ClearTarget();
+        SilentAim::Reset();
         RageBot::Reset();
-        Slide::Reset();
+        KFCSlide::Reset();
+        AutoSlide::Reset();
+        AutoPunch::Reset();
         AntiAim::Reset();
         LocalMods::Reset();
     }
@@ -187,8 +196,11 @@ namespace RuntimeState
         Logger::Log("[SOMALIA][LIFECYCLE] Respawn concluido: restabelecendo estado operacional.");
         Aimbot::ClearTarget();
         AimAssist::Reset();
+        SilentAim::ClearTarget();
+        SilentAim::Reset();
         RageBot::Reset();
-        Slide::Reset();
+        KFCSlide::Reset();
+        AutoSlide::Reset();
         AntiAim::Reset();
     }
 
@@ -322,4 +334,5 @@ namespace RuntimeState
             }
         }
     }
+
 }

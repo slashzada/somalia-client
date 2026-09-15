@@ -10,6 +10,7 @@ namespace LoaderMenu
     {
         Login,
         Register,
+        Loading,
         Dashboard
     };
 

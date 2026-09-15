@@ -5,6 +5,8 @@
 #include "../../Core/RuntimeState.h"
 #include "../../Render/ImGui/imgui.h"
 #include "../../Engine/SAMP/SAMP.h"
+#include "../../Engine/GTA/GTA.h"
+#include "../Visuals/ESP.h"
 #include <stdio.h>
 
 namespace Aimbot
@@ -21,17 +23,7 @@ namespace Aimbot
 
     uint32_t GetCurrentWeaponId()
     {
-        __try
-        {
-            void* pLocalPed = *reinterpret_cast<void**>(0x00B7CD98);
-            if (pLocalPed)
-            {
-                uint8_t slot = *reinterpret_cast<uint8_t*>(reinterpret_cast<uintptr_t>(pLocalPed) + 0x718);
-                return *reinterpret_cast<uint32_t*>(reinterpret_cast<uintptr_t>(pLocalPed) + 0x5A0 + slot * 0x1C);
-            }
-        }
-        __except (EXCEPTION_EXECUTE_HANDLER) {}
-        return 0;
+        return GTA::GetCurrentWeaponId();
     }
 
     const char* GetWeaponProfileName(int group)
@@ -127,10 +119,10 @@ namespace Aimbot
             return;
         }
 
-        ImVec2 screenCenter(displaySize.x * 0.5f, displaySize.y * 0.5f);
+        ImVec2 screenCenter = GTA::GetCrosshairScreenPos();
 
-        // Se o Aimbot e Silent Aim estiverem desligados globalmente, limpa o alvo
-        if (!g_MenuState.aimbot.enabled && !g_MenuState.silentAim.enabled)
+        // Se o Aimbot (LegitBot) estiver desligado globalmente, limpa o alvo
+        if (!g_MenuState.aimbot.enabled)
         {
             if (s_CurrentTarget.valid)
             {
@@ -152,74 +144,61 @@ namespace Aimbot
         int activeGroup = GetActiveWeaponGroup();
         if (activeGroup < 0 || activeGroup >= 4) activeGroup = 0;
 
-        bool isSilentActive = false;
-        if (g_MenuState.silentAim.enabled)
-        {
-            bool hookOk = SAMP::EnsureRakHook();
-            static uint64_t s_lastHookDiagTick = 0;
-            uint64_t nowTick = GetTickCount64();
-            if (nowTick - s_lastHookDiagTick >= 3000)
-            {
-                Logger::Log("[AIMBOT][DIAG] EnsureRakHook() invocado -> retorno=%s | isHooked=%d",
-                    hookOk ? "TRUE" : "FALSE", SAMP::IsRakHooked() ? 1 : 0);
-                s_lastHookDiagTick = nowTick;
-            }
-
-            const auto& sw = g_MenuState.silentAim.weapons[activeGroup];
-            if (sw.enabled)
-            {
-                profile.fov = sw.fov;
-                profile.maxDistance = sw.maxDistance;
-                profile.priority = sw.priority;
-                profile.ignoreDead = sw.ignoreDead;
-                profile.teamCheck = sw.teamCheck;
-                profile.visibilityCheck = sw.visibilityCheck;
-                profile.enabled = true;
-
-                // Bone RANDOM (4): resolve para um osso real no frame atual
-                // (No momento do disparo, o SAMP.cpp resolve de novo independentemente)
-                if (sw.bone == 4)
-                {
-                    static int s_lastRandomBoneFrame = 0;
-                    static int s_cachedRandomBone = 0;
-                    // Recalcula o random a cada 300ms para evitar oscilação visual
-                    uint64_t now = GetTickCount64();
-                    if (s_lastRandomBoneFrame == 0 || (now - (uint64_t)s_lastRandomBoneFrame) > 300)
-                    {
-                        int options[] = { 0, 1, 2, 3 }; // HEAD, NECK, CHEST, PELVIS
-                        s_cachedRandomBone = options[rand() % 4];
-                        s_lastRandomBoneFrame = (int)now;
-                    }
-                    profile.bone = s_cachedRandomBone;
-                }
-                else
-                {
-                    profile.bone = sw.bone;
-                }
-
-                isSilentActive = true;
-            }
-        }
-
         float fovRadius = GetFovRadius(profile.fov);
+
+        uint64_t currentTick = GetTickCount64();
+        static uint64_t s_LastSearchTick = 0;
 
         int candidates = 0;
         int insideFov = 0;
 
-        TargetInfo newTarget = TargetSelector::FindBestTarget(profile, screenCenter, fovRadius, candidates, insideFov);
-
-        // Registro de mudança de alvo somente quando houver alteração
-        int newTargetId = newTarget.valid ? newTarget.playerId : -1;
-        if (newTargetId != s_LastLoggedTargetId)
+        bool needFullSearch = (currentTick - s_LastSearchTick >= 16);
+        if (!s_CurrentTarget.valid || !s_CurrentTarget.ped || !GTA::IsPedAlive(s_CurrentTarget.ped))
         {
-            Logger::Log("[AIMBOT] Target changed: old=%d new=%d", s_LastLoggedTargetId, newTargetId);
-            s_LastLoggedTargetId = newTargetId;
+            needFullSearch = true;
         }
 
-        s_CurrentTarget = newTarget;
+        // Se já temos um alvo válido, atualiza continuamente a posição de tela a cada quadro (600 FPS)
+        if (s_CurrentTarget.valid && s_CurrentTarget.ped && GTA::IsPedAlive(s_CurrentTarget.ped))
+        {
+            float bonePos[3] = { 0 };
+            if (GTA::GetPedBonePosition(s_CurrentTarget.ped, s_CurrentTarget.bone, bonePos) &&
+                ESP::WorldToScreen(bonePos[0], bonePos[1], bonePos[2], s_CurrentTarget.screenPosition))
+            {
+                s_CurrentTarget.worldPosition[0] = bonePos[0];
+                s_CurrentTarget.worldPosition[1] = bonePos[1];
+                s_CurrentTarget.worldPosition[2] = bonePos[2];
+                float dx = s_CurrentTarget.screenPosition.x - screenCenter.x;
+                float dy = s_CurrentTarget.screenPosition.y - screenCenter.y;
+                s_CurrentTarget.distanceFromCrosshair = sqrtf(dx * dx + dy * dy);
+
+                if (s_CurrentTarget.distanceFromCrosshair > fovRadius)
+                {
+                    needFullSearch = true;
+                }
+            }
+            else
+            {
+                needFullSearch = true;
+            }
+        }
+
+        if (needFullSearch)
+        {
+            s_LastSearchTick = currentTick;
+            TargetInfo newTarget = TargetSelector::FindBestTarget(profile, screenCenter, fovRadius, candidates, insideFov, false);
+
+            int newTargetId = newTarget.valid ? newTarget.playerId : -1;
+            if (newTargetId != s_LastLoggedTargetId)
+            {
+                Logger::Log("[AIMBOT] Target changed: old=%d new=%d", s_LastLoggedTargetId, newTargetId);
+                s_LastLoggedTargetId = newTargetId;
+            }
+
+            s_CurrentTarget = newTarget;
+        }
 
         // Telemetria por throttling (~1 segundo)
-        uint64_t currentTick = GetTickCount64();
         if (currentTick - s_LastLogTick >= 1000)
         {
             if (s_CurrentTarget.valid)
@@ -250,11 +229,11 @@ namespace Aimbot
 
         ImVec2 displaySize = ImGui::GetIO().DisplaySize;
         if (displaySize.x <= 0 || displaySize.y <= 0) return;
-        ImVec2 screenCenter(displaySize.x * 0.5f, displaySize.y * 0.5f);
+        ImVec2 screenCenter = GTA::GetCrosshairScreenPos();
 
         // 3. Processa e Renderiza o Aim Assist (Cálculo suave e vetor de diagnóstico)
         AimAssist::Process(s_CurrentTarget, profile, screenCenter);
-        if (!g_MenuState.silentAim.enabled && g_MenuState.legitBot.enabled)
+        if (g_MenuState.legitBot.enabled)
         {
             AimAssist::RenderDebugVisuals(screenCenter, profile);
         }

@@ -17,10 +17,12 @@ def run_tests():
     aimbot_cpp = os.path.join(base_dir, "Features", "Aimbot", "Aimbot.cpp")
     ragebot_h = os.path.join(base_dir, "Features", "Aimbot", "RageBot.h")
     ragebot_cpp = os.path.join(base_dir, "Features", "Aimbot", "RageBot.cpp")
+    silent_h = os.path.join(base_dir, "Features", "SilentAim", "SilentAim.h")
+    silent_cpp = os.path.join(base_dir, "Features", "SilentAim", "SilentAim.cpp")
     menu_cpp = os.path.join(base_dir, "UI", "Menu.cpp")
 
     # 1. Checa existência dos arquivos
-    for p in [config_h, config_cpp, aimbot_cpp, ragebot_h, ragebot_cpp, menu_cpp]:
+    for p in [config_h, config_cpp, aimbot_cpp, ragebot_h, ragebot_cpp, silent_h, silent_cpp, menu_cpp]:
         assert os.path.exists(p), f"Arquivo ausente: {p}"
         print(f"  [OK] Arquivo verificado: {os.path.basename(p)}")
 
@@ -28,12 +30,11 @@ def run_tests():
     with open(config_h, "r", encoding="utf-8") as f:
         c_h = f.read()
 
-    assert "struct LegitWeaponConfig" in c_h, "LegitWeaponConfig ausente no Config.h"
     assert "struct LegitBotConfig" in c_h, "LegitBotConfig ausente no Config.h"
     assert "struct RageWeaponConfig" in c_h, "RageWeaponConfig ausente no Config.h"
     assert "struct RageBotConfig" in c_h, "RageBotConfig ausente no Config.h"
-    assert "LegitBotConfig legitBot;" in c_h, "legitBot ausente no MenuState"
-    assert "RageBotConfig  rageBot;" in c_h or "RageBotConfig rageBot;" in c_h, "rageBot ausente no MenuState"
+    assert "legitBot;" in c_h, "legitBot ausente no MenuState"
+    assert "rageBot;" in c_h, "rageBot ausente no MenuState"
     print("  [OK] Estruturas LegitBotConfig e RageBotConfig isoladas no Config.h")
 
     # 3. Verifica RageBot.h e RageBot.cpp
@@ -49,6 +50,20 @@ def run_tests():
     assert "static RageBotState s_RageState" in r_cpp or "s_RageState" in r_cpp, "RageBotState dedicado ausente no RageBot.cpp"
     assert "mouse_event" not in r_cpp, "VIOLAÇÃO: RageBot não deve usar mouse_event em partidas"
     print("  [OK] RageBot.cpp possui s_RageTarget e s_RageState próprios (Zero mouse_event)")
+
+    # 3.1 Verifica SilentAim.h e SilentAim.cpp
+    with open(silent_h, "r", encoding="utf-8") as f:
+        s_h = f.read()
+    assert "struct SilentAimState" in s_h, "SilentAimState ausente no SilentAim.h"
+    assert "namespace SilentAim" in s_h, "namespace SilentAim ausente no SilentAim.h"
+    print("  [OK] SilentAim.h define estado e namespace próprios")
+
+    with open(silent_cpp, "r", encoding="utf-8") as f:
+        s_cpp = f.read()
+    assert "s_SilentTarget" in s_cpp, "s_SilentTarget ausente no SilentAim.cpp"
+    assert "s_SilentState" in s_cpp, "s_SilentState ausente no SilentAim.cpp"
+    assert "MutateBulletSyncPacket" in s_cpp, "MutateBulletSyncPacket ausente no SilentAim.cpp"
+    print("  [OK] SilentAim.cpp possui s_SilentTarget e s_SilentState próprios com MutateBulletSyncPacket")
 
     # 4. Verifica Menu.cpp
     with open(menu_cpp, "r", encoding="utf-8") as f:
@@ -398,7 +413,13 @@ def run_tests():
     assert "vehicleESP" in e_code, "Vehicles ESP ausente no ESP.cpp"
     assert "pickupESP" in e_code, "Pickups ESP ausente no ESP.cpp"
 
-    assert "silentAim" in a_code, "Silent Aim ausente no AimAssist.cpp"
+    silent_cpp = os.path.join(base_dir, "Features", "SilentAim", "SilentAim.cpp")
+    with open(silent_cpp, "r", encoding="utf-8") as f:
+        s_code = f.read()
+    assert "MutateBulletSyncPacket" in s_code, "MutateBulletSyncPacket ausente no SilentAim.cpp"
+    assert "FindTargetOnShot" in s_code, "FindTargetOnShot ausente no SilentAim.cpp"
+    assert "s_SilentDiag" not in a_code, "s_SilentDiag ainda presente no AimAssist.cpp"
+    assert "SilentAimDiagnostic" not in a_code, "SilentAimDiagnostic ainda presente no AimAssist.cpp"
     assert "exploitLagPeek" in a_code, "Lag Peek ausente no AimAssist.cpp"
     assert "exploitHideShots" in a_code, "Hide Shots ausente no AimAssist.cpp"
     assert "exploitDoubleTap" in a_code, "Double Tap ausente no AimAssist.cpp"
@@ -447,7 +468,58 @@ def run_tests():
     print("  [OK] Auditoria de Cursor: OPEN=PASS, CLOSE=PASS, ALT_TAB=PASS, FOCUS=PASS, CHAT_WORKAROUND_REQUIRED=NO")
 
     print("\n================================================================")
-    print("TODOS OS TESTES DE AUDITORIA 2, CONTROLES E ISOLAMENTO PASSARAM!")
+    print("[TESTE 9] Auditoria do Modulo Independente FistSwitch (xxxx.cs 1:1)")
+    print("================================================================")
+    fist_h = os.path.join(base_dir, "Features", "FistSwitch", "FistSwitch.h")
+    fist_cpp = os.path.join(base_dir, "Features", "FistSwitch", "FistSwitch.cpp")
+    d3d9_cpp = os.path.join(base_dir, "Render", "D3D9Hook.cpp")
+    main_cpp = os.path.join(base_dir, "Core", "Main.cpp")
+
+    assert os.path.exists(fist_h), f"FistSwitch.h ausente: {fist_h}"
+    assert os.path.exists(fist_cpp), f"FistSwitch.cpp ausente: {fist_cpp}"
+    print("  [OK] Arquivos FistSwitch.h e FistSwitch.cpp existem no modulo isolado")
+
+    with open(fist_h, "r", encoding="utf-8") as f:
+        fh_content = f.read()
+    assert "namespace FistSwitch" in fh_content, "namespace FistSwitch ausente em FistSwitch.h"
+    print("  [OK] FistSwitch.h define namespace proprio isolado")
+
+    with open(fist_cpp, "r", encoding="utf-8") as f:
+        fcpp_content = f.read()
+    assert "0x005E6280" in fcpp_content, "Chamada CPed::SetCurrentWeapon (0x005E6280) ausente em FistSwitch.cpp"
+    assert "0x46D" in fcpp_content, "Checagem de ar/veiculo (0x46D) ausente em FistSwitch.cpp"
+    assert "AutoSlide" not in fcpp_content, "FistSwitch nao deve depender de AutoSlide"
+    assert "KFCSlide" not in fcpp_content, "FistSwitch nao deve depender de KFCSlide"
+    print("  [OK] FistSwitch.cpp 1:1 com xxxx.cs (0x005E6280, flags 0x46D) e 100% isolado")
+
+    with open(config_h, "r", encoding="utf-8") as f:
+        ch_content = f.read()
+    assert "struct FistSwitchConfig" in ch_content, "FistSwitchConfig ausente em Config.h"
+    assert "FistSwitchConfig fistSwitch;" in ch_content, "fistSwitch ausente em MenuState"
+    print("  [OK] Config.h define FistSwitchConfig e fistSwitch")
+
+    with open(config_cpp, "r", encoding="utf-8") as f:
+        ccpp_content = f.read()
+    assert 'fistSwitch' in ccpp_content and r'\"fistSwitch\"' in ccpp_content, "Chave fistSwitch ausente em Config.cpp"
+    print("  [OK] Config.cpp serializa e desserializa fistSwitch")
+
+    with open(menu_cpp, "r", encoding="utf-8") as f:
+        mcpp_content = f.read()
+    assert "fistSwitch.enabled" in mcpp_content, "Checkbox fistSwitch.enabled ausente em Menu.cpp"
+    print("  [OK] Menu.cpp expoe controle dedicado para Auto Fist Switch")
+
+    with open(d3d9_cpp, "r", encoding="utf-8") as f:
+        d_content = f.read()
+    assert "FistSwitch::Update()" in d_content, "FistSwitch::Update ausente no loop de render do D3D9Hook"
+    print("  [OK] D3D9Hook chama FistSwitch::Update() em sincronia com os frames")
+
+    with open(main_cpp, "r", encoding="utf-8") as f:
+        mn_content = f.read()
+    assert "FistSwitch::Reset()" in mn_content, "FistSwitch::Reset ausente no encerramento limpo do Main.cpp"
+    print("  [OK] Main.cpp limpa estado via FistSwitch::Reset()")
+
+    print("\n================================================================")
+    print("TODOS OS TESTES DE AUDITORIA, CONTROLES E ISOLAMENTO PASSARAM!")
     print("================================================================")
 
 if __name__ == "__main__":

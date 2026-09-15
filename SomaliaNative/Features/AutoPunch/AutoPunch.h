@@ -2,8 +2,9 @@
 #include <windows.h>
 #include <cstdint>
 
-namespace Slide
+namespace AutoPunch
 {
-    void Update();
+    void Initialize();
     void Reset();
+    void Update();
 }

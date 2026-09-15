@@ -88,8 +88,6 @@ function HUD.render(config, customDrawList)
         if config.aim and config.aim.globalEnabled then table.insert(activeList, "Aimbot") end
         if config.silent and config.silent.globalEnabled then table.insert(activeList, "Silent Aim") end
         if config.visuals and config.visuals.enabled then table.insert(activeList, "Visuals (ESP)") end
-        if config.player and config.player.cSlideAtivo then table.insert(activeList, "C-Slide") end
-        if config.player and config.player.autoSlideAtivo then table.insert(activeList, "Auto Slide") end
         if config.vehicles and config.vehicles.godmode then table.insert(activeList, "Car Godmode") end
         
         if #activeList > 0 then

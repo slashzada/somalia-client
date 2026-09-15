@@ -1,6 +1,9 @@
 #pragma once
 #include <windows.h>
+#include <stdint.h>
 #include <d3d9.h>
+
+#include "../../Render/ImGui/imgui.h"
 
 namespace GTA
 {
@@ -20,4 +23,27 @@ namespace GTA
     float GetPedHealth(void* pPed);
     float GetPedArmor(void* pPed);
     bool IsPedAlive(void* pPed);
+
+    // Coordenadas reais da mira (Crosshair) na tela do GTA SA 1.0 US
+    uint16_t GetCameraMode();
+    uint32_t GetCurrentWeaponId();
+    bool GetCrosshairOffset(float& outX, float& outY);
+    ImVec2 GetCrosshairScreenPos();
+    float GetMouseSensitivity();
+
+    // Controle e redirecionamento de câmera do motor GTA SA (Silent Aim)
+    bool GetCameraFront(float outFront[3]);
+    bool SetCameraFront(const float inFront[3]);
+    bool GetCameraSource(float outSource[3]);
+
+    // Callback pré-disparo para redirecionamento nativo em CWeapon::FireInstantHit (0x00742300)
+    typedef bool (*WeaponFirePreHandler_t)(void* pWeapon, void* pPed, void* pOrigin, void* pTarget,
+                                           float outSavedFront[3], float outSavedTarget[3], bool& outModifiedTarget);
+    void SetWeaponFirePreHandler(WeaponFirePreHandler_t handler);
+
+    // Detour hook nativo em CWeapon::FireInstantHit (0x00742300)
+    bool InstallWeaponHooks();
+    void UninstallWeaponHooks();
+    bool IsWeaponHooked();
 }
+

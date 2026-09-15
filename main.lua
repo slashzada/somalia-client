@@ -33,6 +33,7 @@ local okKeybinds, Keybinds = safeRequire('somalia.keybinds', 'keybinds')
 local okConfig, Config = safeRequire('somalia.config', 'config')
 local okHUD, HUD = safeRequire('somalia.hud', 'hud')
 local okAim, Aim = safeRequire('somalia.aim', 'aim')
+local okSilent, Silent = safeRequire('somalia.silent', 'silent')
 local okVisuals, Visuals = safeRequire('somalia.visuals', 'visuals')
 local okPlayer, Player = safeRequire('somalia.player', 'player')
 local okVehicles, Vehicles = safeRequire('somalia.vehicles', 'vehicles')
@@ -422,6 +423,7 @@ if okImgui then
                 if drawList then
                     if okVisuals and Visuals.render then pcall(Visuals.render, Config.data, drawList) end
                     if okAim and Aim.renderFovCircle then pcall(Aim.renderFovCircle, Config.data, drawList) end
+                    if okSilent and Silent.renderFovCircle then pcall(Silent.renderFovCircle, Config.data, drawList) end
                     if okHUD and HUD.render then pcall(HUD.render, Config.data, drawList) end
                     if okNotifications and Notifications.render then pcall(Notifications.render, drawList) end
                 end
@@ -651,44 +653,19 @@ if okImgui then
                     imgui.EndChild()
 
                 ---------------------------------------------------------
-                -- ABA 5: PLAYERS (C-SLIDE & MOVIMENTO)
+                -- ABA 5: PLAYERS (MOVIMENTO)
                 ---------------------------------------------------------
                 elseif abaLateral == 5 then
-                    -- CARD 1: C-Slide & Mecânicas
+                    -- CARD 1: Movement
                     imgui.BeginChild("##CardSlide1", imgui.ImVec2(larguraColuna, 0), true)
                         imgui.SetCursorPosX(12); imgui.SetCursorPosY(10)
                         if Theme.Fonts.Title then imgui.PushFont(Theme.Fonts.Title) end
-                        imgui.TextColored(branco, "C-Slide & Movement")
+                        imgui.TextColored(branco, "Movement")
                         if Theme.Fonts.Title then imgui.PopFont() end
                         imgui.Spacing()
 
-                        DrawVideoCheckbox("Script Geral (Master)", Config.data.player.scriptAtivo, "chk_slide_master", function(v) Config.data.player.scriptAtivo = v end)
-                        DrawVideoCheckbox("C-Slide Ativo", Config.data.player.cSlideAtivo, "chk_slide_cslide", function(v) Config.data.player.cSlideAtivo = v end)
-                        DrawVideoCheckbox("Auto Slide (Quick Switch)", Config.data.player.autoSlideAtivo, "chk_slide_auto", function(v) Config.data.player.autoSlideAtivo = v end)
-
-                        DrawVideoSlider("Duração da Tecla C", Config.data.player.duracaoC, 5, 100, "ms", "sld_slide_durc", function(v) Config.data.player.duracaoC = v end)
-                        DrawVideoSlider("Delay pós-tiro", Config.data.player.delayTroca, 0, 250, "ms", "sld_slide_delay", function(v) Config.data.player.delayTroca = v end)
-                        
-                        imgui.Spacing(); imgui.Separator(); imgui.Spacing()
                         DrawVideoCheckbox("Infinite Stamina", Config.data.player.infiniteStamina, "chk_p_infstam", function(v) Config.data.player.infiniteStamina = v end)
                         DrawVideoCheckbox("No Fall Damage", Config.data.player.noFallDamage, "chk_p_nofall", function(v) Config.data.player.noFallDamage = v end)
-                    imgui.EndChild()
-
-                    imgui.SameLine(0, 10)
-
-                    -- CARD 2: Margens por Arma
-                    imgui.BeginChild("##CardSlide2", imgui.ImVec2(larguraColuna, 0), true)
-                        imgui.SetCursorPosX(12); imgui.SetCursorPosY(10)
-                        if Theme.Fonts.Title then imgui.PushFont(Theme.Fonts.Title) end
-                        imgui.TextColored(branco, "Weapon Margins")
-                        if Theme.Fonts.Title then imgui.PopFont() end
-                        imgui.Spacing()
-
-                        DrawVideoSlider("Desert Eagle (Deagle)", Config.data.player.margem_desert, 0, 1000, "ms", "sld_m_deagle", function(v) Config.data.player.margem_desert = v end)
-                        DrawVideoSlider("Shotgun", Config.data.player.margem_shot, 0, 1000, "ms", "sld_m_shot", function(v) Config.data.player.margem_shot = v end)
-                        DrawVideoSlider("Sniper Rifle", Config.data.player.margem_snp, 0, 1000, "ms", "sld_m_snp", function(v) Config.data.player.margem_snp = v end)
-                        DrawVideoSlider("M4 Assault", Config.data.player.margem_m4, 0, 1000, "ms", "sld_m_m4", function(v) Config.data.player.margem_m4 = v end)
-                        DrawVideoSlider("AK-47", Config.data.player.margem_ak, 0, 1000, "ms", "sld_m_ak", function(v) Config.data.player.margem_ak = v end)
                     imgui.EndChild()
 
                 ---------------------------------------------------------
@@ -864,7 +841,7 @@ function main()
 
         local inGame = isPlayerReady()
         local visualsActive = inGame and Config.data.visuals and Config.data.visuals.enabled or false
-        local curW = okAim and Aim.getCurrentWeaponId and Aim.getCurrentWeaponId() or 0
+        local curW = (okAim and Aim.getCurrentWeaponId and Aim.getCurrentWeaponId()) or (okSilent and Silent.getCurrentWeaponId and Silent.getCurrentWeaponId()) or 0
         
         -- Checagem de FOV Aimbot e Silent Aim ativos para a arma atual
         local wAim = okConfig and Config.getAimWeapon and Config.getAimWeapon(curW) or nil

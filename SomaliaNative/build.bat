@@ -54,6 +54,8 @@ cl /nologo /O2 /MT /std:c++20 /EHsc /W3 /D "WIN32" /D "_WINDOWS" /D "_USRDLL" /D
    ..\Core\Main.cpp ^
    ..\Core\Logger.cpp ^
    ..\Core\RuntimeState.cpp ^
+   ..\Core\StreamProof.cpp ^
+   ..\Core\ScriptManager.cpp ^
    ..\Render\D3D9Hook.cpp ^
    ..\Render\ImGui\imgui.cpp ^
    ..\Render\ImGui\imgui_draw.cpp ^
@@ -74,9 +76,15 @@ cl /nologo /O2 /MT /std:c++20 /EHsc /W3 /D "WIN32" /D "_WINDOWS" /D "_USRDLL" /D
    ..\Features\Aimbot\Aimbot.cpp ^
    ..\Features\Aimbot\AimAssist.cpp ^
    ..\Features\Aimbot\RageBot.cpp ^
+   ..\Features\SilentAim\SilentAim.cpp ^
    ..\Features\LocalMods\LocalMods.cpp ^
-   ..\Features\Slide\Slide.cpp ^
+   ..\Features\KFCSlide\KFCSlide.cpp ^
+   ..\Features\AutoSlide\AutoSlide.cpp ^
+   ..\Features\FistSwitch\FistSwitch.cpp ^
+   ..\Features\AutoPunch\AutoPunch.cpp ^
    ..\Features\AntiAim\AntiAim.cpp ^
+   ..\Features\Aimbot\TriggerBot.cpp ^
+   ..\Features\PlayerSlap\PlayerSlap.cpp ^
    /link /DLL /OUT:"SomaliaNative.asi" user32.lib gdi32.lib d3d9.lib shell32.lib wininet.lib
 
 if %ERRORLEVEL% EQU 0 (
@@ -84,14 +92,7 @@ if %ERRORLEVEL% EQU 0 (
     echo [SUCESSO] SomaliaNative.asi compilado com sucesso!
     echo Local: %CD%\SomaliaNative.asi
     echo ========================================================
-    copy /Y "SomaliaNative.asi" "..\..\dist\SomaliaNative.asi" >nul
     copy /Y "SomaliaNative.asi" "..\..\SomaliaNative.asi" >nul
-    if exist "C:\Users\Usuario\Downloads\slash again\slash again" (
-        copy /Y "SomaliaNative.asi" "C:\Users\Usuario\Downloads\slash again\slash again\SomaliaNative.asi" >nul
-    )
-    if exist "D:\sa-mpo\slash again" (
-        copy /Y "SomaliaNative.asi" "D:\sa-mpo\slash again\SomaliaNative.asi" >nul
-    )
     cd ..
     exit /b 0
 ) else (

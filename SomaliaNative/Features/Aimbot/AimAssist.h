@@ -22,32 +22,18 @@ struct AimAssistState
     bool applied = false;
 };
 
-struct SilentAimDiagnostic
-{
-    bool active = false;
-    int targetId = -1;
-    char targetName[32] = "";
-    char boneName[16] = "";
-    float targetWorldPos[3] = { 0.0f, 0.0f, 0.0f };
-    float predictedImpact[3] = { 0.0f, 0.0f, 0.0f };
-    float screenDist = 0.0f;
-    int hitChance = 100;
-    bool hitChancePassed = false;
-    uint64_t lastShotTick = 0;
-};
-
 namespace AimAssist
 {
     // Verifica se a condição de ativação (Always, While Aiming, While Shooting, Aim+Shoot) está satisfeita
     bool CheckActivationCondition(int activationMode);
 
-    // Retorna se o AimAssist está atualmente ativo (Aimbot enabled + Target válido + Ativação satisfeita)
+    // Retorna se o AimAssist está atualmente ativo (LegitBot enabled + Target válido + Ativação satisfeita)
     bool IsActive();
 
     // Retorna o estado atual do cálculo de assistência
     const AimAssistState& GetState();
 
-    // Aplica fisicamente o movimento relativo de mira ao jogo via mouse_event
+    // Aplica fisicamente o movimento relativo de mira ao jogo via SendInput
     bool Apply(int moveX, int moveY);
 
     // Processa o cálculo suave sobre o TargetInfo recebido do TargetSelector
@@ -58,10 +44,5 @@ namespace AimAssist
 
     // Reseta o estado e acumuladores (ex.: quando alvo é perdido ou troca de alvo)
     void Reset();
-
-    // Diagnóstico e telemetria de Silent Aim
-    const SilentAimDiagnostic& GetSilentDiagnostic();
-    void ResetSilentDiagnostic();
-    uint64_t GetLastLocalShotTick();
 }
 

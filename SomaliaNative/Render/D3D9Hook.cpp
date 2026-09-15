@@ -4,6 +4,7 @@
 #include "../Core/Logger.h"
 #include "../Core/Main.h"
 #include "../Core/RuntimeState.h"
+#include "../Core/StreamProof.h"
 #include <atomic>
 #include "../UI/Menu.h"
 #include "../UI/Theme.h"
@@ -15,9 +16,15 @@
 #include "../Features/Aimbot/Aimbot.h"
 #include "../Features/Aimbot/AimAssist.h"
 #include "../Features/Aimbot/RageBot.h"
+#include "../Features/SilentAim/SilentAim.h"
 #include "../Features/LocalMods/LocalMods.h"
-#include "../Features/Slide/Slide.h"
+#include "../Features/KFCSlide/KFCSlide.h"
+#include "../Features/AutoSlide/AutoSlide.h"
+#include "../Features/FistSwitch/FistSwitch.h"
+#include "../Features/AutoPunch/AutoPunch.h"
 #include "../Features/AntiAim/AntiAim.h"
+#include "../Features/Aimbot/TriggerBot.h"
+#include "../Features/PlayerSlap/PlayerSlap.h"
 
 namespace D3D9Hook
 {
@@ -30,6 +37,8 @@ namespace D3D9Hook
     static bool     s_bImGuiInitialized = false;
     static std::atomic<bool> s_HooksRestored(false);
     static std::atomic<bool> s_UIDestroyed(false);
+    static bool     s_bStreamProofInitialized = false;
+    static bool     s_bLastStreamProofState = false;
 
     static HRESULT __stdcall hkReset(IDirect3DDevice9* pDevice, D3DPRESENT_PARAMETERS* pPresentationParameters)
     {
@@ -99,6 +108,24 @@ namespace D3D9Hook
             Menu::Initialize(pDevice);
             InputManager::Initialize(hWnd);
 
+            // 5.5 Inicializa os modulos nativos de gameplay
+            KFCSlide::Initialize();
+            AutoSlide::Initialize();
+            FistSwitch::Initialize();
+            AutoPunch::Initialize();
+            AntiAim::Initialize();
+            TriggerBot::Initialize();
+            SilentAim::Initialize();
+            Logger::Log("Modulos nativos de gameplay inicializados (KFC, AutoSlide, FistSwitch, AutoPunch, AntiAim, TriggerBot, SilentAim).");
+
+            StreamProof::Initialize(hWnd);
+            s_bStreamProofInitialized = true;
+            s_bLastStreamProofState = g_MenuState.misc.streamProof;
+            if (g_MenuState.misc.streamProof)
+            {
+                StreamProof::SetEnabled(true);
+            }
+
             s_bImGuiInitialized = true;
             Logger::Log("ImGui context criado");
             Logger::Log("DX9 backend inicializado");
@@ -106,6 +133,16 @@ namespace D3D9Hook
             Logger::Log("Menu inicializado");
             Logger::Log("Input inicializado");
             Logger::Log("SomaliaNative pronta");
+        }
+
+        if (s_bStreamProofInitialized)
+        {
+            bool currentCfg = g_MenuState.misc.streamProof;
+            if (currentCfg != s_bLastStreamProofState)
+            {
+                StreamProof::SetEnabled(currentCfg);
+                s_bLastStreamProofState = currentCfg;
+            }
         }
 
         // Render Loop do ImGui
@@ -119,17 +156,36 @@ namespace D3D9Hook
         // 2. Renderiza o Legit Bot (Target Indicator e selecao suave)
         Aimbot::Render();
 
+        // 2.1 Renderiza o Silent Aim isolado (Silent Target Marker [ O ], Silent FOV Circle, telemetria)
+        SilentAim::Render();
+
         // 3. Renderiza o Ragebot completamente independente (indicadores, fov crimson e vetor de agressividade)
         RageBot::Render();
 
         // 4. Processa os modificadores locais de motor do GTA (Player, Veículo, Ambiente)
         LocalMods::Update();
 
-        // 5. Processa a mecânica de C-Slide e Quick Switch
-        Slide::Update();
+        // 5. Processa KFC Slide
+        KFCSlide::Update();
 
-        // 5.1 Processa Anti-Aim e Fake Lag
+        // 5.1 Processa Auto Slide Nativo (C-Slide original por margem de arma)
+        AutoSlide::Update();
+
+        // 5.2 Processa Fist Switch (xxxx.cs 1:1)
+        FistSwitch::Update();
+
+        // 5.25 Processa Auto Punch (Auto Soco apos slide + troca para soco)
+        AutoPunch::Update();
+
+        // 5.3 Processa Anti-Aim e Fake Lag
         AntiAim::Update();
+
+        // 5.3 Processa Triggerbot
+        TriggerBot::Update();
+
+        // 5.4 Processa Player Slap Exploit (Hotkeys e Notificacoes)
+        PlayerSlap::Update();
+        PlayerSlap::RenderNotifications();
 
         // 6. Renderiza a interface Somalia (quando aberta)
         Menu::Render();
@@ -226,5 +282,10 @@ namespace D3D9Hook
     {
         RestoreHooks();
         DestroyUI();
+        if (s_bStreamProofInitialized)
+        {
+            StreamProof::Shutdown();
+            s_bStreamProofInitialized = false;
+        }
     }
 }

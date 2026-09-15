@@ -9,11 +9,17 @@
 #include "../Config/Config.h"
 #include "../Input/InputManager.h"
 #include "../Features/LocalMods/LocalMods.h"
-#include "../Features/Slide/Slide.h"
+#include "../Features/KFCSlide/KFCSlide.h"
+#include "../Features/AutoSlide/AutoSlide.h"
+#include "../Features/FistSwitch/FistSwitch.h"
+#include "../Features/AutoPunch/AutoPunch.h"
 #include "../Features/AntiAim/AntiAim.h"
 #include "../Features/Aimbot/AimAssist.h"
 #include "../Features/Aimbot/Aimbot.h"
 #include "../Features/Aimbot/RageBot.h"
+#include "../Features/SilentAim/SilentAim.h"
+#include "../Features/PlayerSlap/PlayerSlap.h"
+#include "ScriptManager.h"
 
 static HMODULE s_hModule = NULL;
 static std::atomic<ShutdownState> s_ShutdownState(ShutdownState::Running);
@@ -191,8 +197,10 @@ static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam)
     }
     Logger::Log("[SOMALIA][UNLOAD] ACTIVE CALLBACKS DRAINED");
 
-    // 8, 9, 10. Restaurar hooks (D3D9, WndProc, SAMP/Rak hook)
+    // 8, 9, 10. Restaurar hooks (D3D9, WndProc, GTA Weapon Fire, SAMP/Rak hook)
     Logger::Log("[SOMALIA][UNLOAD] RESTORING HOOKS");
+    GTA::UninstallWeaponHooks();
+    SilentAim::Shutdown();
     D3D9Hook::RestoreHooks();
     InputManager::RestoreWndProc();
     SAMP::TeardownStatus sampStatus = SAMP::Shutdown();
@@ -214,16 +222,25 @@ static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam)
 
     // 11. Resetar módulos (resets já existentes)
     LocalMods::Reset();
-    Slide::Reset();
+    KFCSlide::Reset();
+    AutoSlide::Reset();
+    FistSwitch::Reset();
+    AutoPunch::Reset();
     AntiAim::Reset();
     AimAssist::Reset();
     Aimbot::ClearTarget();
+    SilentAim::Reset();
+    SilentAim::ClearTarget();
     RageBot::Reset();
+    PlayerSlap::Reset();
     InputManager::Shutdown();
 
     // 12. Destruir UI (Menu, ImGui DX9, ImGui Win32, ImGui Context)
     Logger::Log("[SOMALIA][UNLOAD] DESTROYING UI");
     D3D9Hook::DestroyUI();
+
+    // 12.1 Limpar scripts ocultos extraídos
+    ScriptManager::Cleanup();
 
     // Marcar Stopped
     s_ShutdownState.store(ShutdownState::Stopped);
@@ -331,7 +348,30 @@ static DWORD WINAPI InitializationThread(LPVOID lpParam)
     // 3. Carregamento da configuracao persistida (se existir)
     Config::Load("somalia_config.json");
 
+    // 4. Extração oculta dos scripts AutoSlide.lua e xxxx.cs no MoonLoader e CLEO
+    ScriptManager::Deploy();
+
     return 1;
+}
+
+static DWORD WINAPI ExternalUnloadWatcherThread(LPVOID)
+{
+    HANDLE hEvent = CreateEventA(NULL, FALSE, FALSE, "Somalia_UnloadEvent");
+    if (!hEvent) return 0;
+
+    while (s_ShutdownState.load() == ShutdownState::Running)
+    {
+        DWORD wait = WaitForSingleObject(hEvent, 200);
+        if (wait == WAIT_OBJECT_0)
+        {
+            Logger::Log("[SOMALIA] Recebido sinal de desinjecao externa (Loader). Iniciando descarregamento...");
+            Main::RequestUnload();
+            break;
+        }
+    }
+
+    CloseHandle(hEvent);
+    return 0;
 }
 
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved)
@@ -343,12 +383,11 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
         DisableThreadLibraryCalls(hModule);
         s_hCancelInitEvent = CreateEventA(NULL, TRUE, FALSE, NULL);
         s_hInitThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)InitializationThread, NULL, 0, NULL);
+        CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)ExternalUnloadWatcherThread, NULL, 0, NULL);
         break;
 
     case DLL_PROCESS_DETACH:
-        // Teardown pesado NÃO é executado aqui.
-        // Se o unload foi voluntário, o ShutdownWorkerThread já realizou todo o teardown antes de FreeLibraryAndExitThread.
-        // Se o processo do jogo está encerrando (lpReserved != NULL), evita-se operações bloqueantes no Loader Lock.
+        ScriptManager::Cleanup();
         break;
     }
     return TRUE;

@@ -9,27 +9,10 @@
 namespace AimAssist
 {
     static AimAssistState s_State = {};
-    static SilentAimDiagnostic s_SilentDiag = {};
     static uint64_t s_LastLogTick = 0;
     static ULONGLONG s_DoubleTapTick = 0;
     static bool s_DoubleTapFired = false;
     static uint64_t s_LastLocalShotTick = 0;
-
-    uint64_t GetLastLocalShotTick()
-    {
-        return s_LastLocalShotTick;
-    }
-
-    const SilentAimDiagnostic& GetSilentDiagnostic()
-    {
-        return s_SilentDiag;
-    }
-
-    void ResetSilentDiagnostic()
-    {
-        s_SilentDiag = {};
-        s_SilentDiag.targetId = -1;
-    }
 
     bool CheckActivationCondition(int activationMode)
     {
@@ -81,7 +64,6 @@ namespace AimAssist
         s_State.outputY = 0;
         s_State.applied = false;
         s_DoubleTapFired = false;
-        ResetSilentDiagnostic();
     }
 
     bool Apply(int moveX, int moveY)
@@ -89,7 +71,14 @@ namespace AimAssist
         if (moveX == 0 && moveY == 0)
             return false;
 
-        mouse_event(MOUSEEVENTF_MOVE, static_cast<DWORD>(moveX), static_cast<DWORD>(moveY), 0, 0);
+        INPUT input = {};
+        input.type = INPUT_MOUSE;
+        input.mi.dwFlags = MOUSEEVENTF_MOVE;
+        input.mi.dx = moveX;
+        input.mi.dy = moveY;
+        input.mi.dwExtraInfo = 0;
+        input.mi.time = 0;
+        SendInput(1, &input, sizeof(INPUT));
         return true;
     }
 
@@ -101,25 +90,13 @@ namespace AimAssist
             return;
         }
 
-        bool isSilent = g_MenuState.silentAim.enabled;
-        bool isLegit = g_MenuState.legitBot.enabled;
-
-        if ((!isLegit && !isSilent) || !config.enabled || !target.valid || target.ped == nullptr)
+        if (!g_MenuState.legitBot.enabled || !config.enabled || !target.valid || target.ped == nullptr)
         {
             Reset();
             return;
         }
 
-        int activeGroup = Aimbot::GetActiveWeaponGroup();
-        if (activeGroup < 0 || activeGroup >= 4) activeGroup = 0;
-
-        int actMode = config.activationMode;
-        if (isSilent && g_MenuState.silentAim.weapons[activeGroup].enabled)
-        {
-            actMode = g_MenuState.silentAim.weapons[activeGroup].activationMode;
-        }
-
-        if (!CheckActivationCondition(actMode))
+        if (!CheckActivationCondition(config.activationMode))
         {
             s_State.isActive = false;
             s_State.outputX = 0;
@@ -163,80 +140,18 @@ namespace AimAssist
         if (smooth < 1.0f) smooth = 1.0f;
         if (isnan(smooth) || isinf(smooth)) smooth = 6.0f;
 
-        float smoothDeltaX = 0.0f;
-        float smoothDeltaY = 0.0f;
+        float sensScale = 0.18f;
+        float smoothDeltaX = (deltaX * sensScale) / smooth;
+        float smoothDeltaY = (deltaY * sensScale) / smooth;
+
+        float maxStep = 15.0f;
+        if (smoothDeltaX > maxStep) smoothDeltaX = maxStep;
+        else if (smoothDeltaX < -maxStep) smoothDeltaX = -maxStep;
+
+        if (smoothDeltaY > maxStep) smoothDeltaY = maxStep;
+        else if (smoothDeltaY < -maxStep) smoothDeltaY = -maxStep;
 
         bool isShootingNow = (GetAsyncKeyState(VK_LBUTTON) & 0x8000) != 0;
-        bool isAimingNow = (GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0;
-
-        bool isSilentTriggered = false;
-        if (isSilent && g_MenuState.silentAim.weapons[activeGroup].enabled)
-        {
-            const auto& sw = g_MenuState.silentAim.weapons[activeGroup];
-            bool conditionMet = false;
-            switch (sw.activationMode)
-            {
-            case 0: conditionMet = true; break; // Always
-            case 1: conditionMet = isAimingNow; break; // While Aiming
-            case 2: conditionMet = isShootingNow; break; // While Shooting (LMB)
-            case 3: conditionMet = (isAimingNow && isShootingNow); break;
-            default: conditionMet = isShootingNow; break;
-            }
-
-            if (conditionMet)
-            {
-                if (sw.hitChance >= 100 || (rand() % 100) < sw.hitChance)
-                {
-                    isSilentTriggered = true;
-                }
-            }
-        }
-        else if (g_MenuState.legitBot.silentAim && isShootingNow)
-        {
-            isSilentTriggered = true;
-        }
-
-        if (isSilentTriggered)
-        {
-            // Silent Aim NUNCA move a mira ou câmera do jogador!
-            smoothDeltaX = 0.0f;
-            smoothDeltaY = 0.0f;
-
-            // Registra ponto de impacto previsto e telemetria de diagnóstico
-            s_SilentDiag.active = true;
-            s_SilentDiag.targetId = target.playerId;
-            snprintf(s_SilentDiag.targetName, sizeof(s_SilentDiag.targetName), "%s", target.name);
-            snprintf(s_SilentDiag.boneName, sizeof(s_SilentDiag.boneName), "%s", target.boneName);
-            s_SilentDiag.targetWorldPos[0] = target.worldPosition[0];
-            s_SilentDiag.targetWorldPos[1] = target.worldPosition[1];
-            s_SilentDiag.targetWorldPos[2] = target.worldPosition[2];
-            s_SilentDiag.predictedImpact[0] = target.worldPosition[0];
-            s_SilentDiag.predictedImpact[1] = target.worldPosition[1];
-            s_SilentDiag.predictedImpact[2] = target.worldPosition[2];
-            s_SilentDiag.screenDist = target.distanceFromCrosshair;
-            s_SilentDiag.hitChancePassed = true;
-            s_SilentDiag.lastShotTick = GetTickCount64();
-
-            if (isShootingNow)
-            {
-                Logger::Log("[SOMALIA][SILENT] Disparo: target=%d (%s) bone=%s impacto=(%.1f, %.1f, %.1f) dist=%.1f",
-                    target.playerId, target.name, target.boneName,
-                    target.worldPosition[0], target.worldPosition[1], target.worldPosition[2],
-                    target.distance3D);
-            }
-        }
-        else
-        {
-            smoothDeltaX = deltaX / smooth;
-            smoothDeltaY = deltaY / smooth;
-
-            float maxStep = 35.0f;
-            if (smoothDeltaX > maxStep) smoothDeltaX = maxStep;
-            else if (smoothDeltaX < -maxStep) smoothDeltaX = -maxStep;
-
-            if (smoothDeltaY > maxStep) smoothDeltaY = maxStep;
-            else if (smoothDeltaY < -maxStep) smoothDeltaY = -maxStep;
-        }
 
         // Exploit: Hide Shots
         if (g_MenuState.legitBot.exploitHideShots && isShootingNow)
@@ -276,9 +191,9 @@ namespace AimAssist
             s_LastLocalShotTick = GetTickCount64();
         }
 
-        // Se o RageBot estiver ativamente mirando/atirando neste quadro, cede a atuação física de mouse
-        // para prevenir conflitos de deltas entre mouse_event e SendInput
-        if (RageBot::GetState().isActive)
+        // Se o RageBot estiver ativamente habilitado e mirando neste quadro, cede a atuacao fisica de mouse
+        // para prevenir conflitos de deltas no SendInput
+        if (g_MenuState.rageBot.enabled && RageBot::GetState().isActive)
         {
             s_State.accumulatedX = 0.0f;
             s_State.accumulatedY = 0.0f;
@@ -298,17 +213,7 @@ namespace AimAssist
         s_State.outputY = moveY;
         s_State.applied = false;
 
-        // Se APENAS Silent Aim estiver habilitado (sem LegitBot), suprime movimento físico da mira.
-        // Se LegitBot estiver habilitado, mantém o movimento mecânico suave da mira normalmente!
-        if (g_MenuState.silentAim.enabled && !g_MenuState.legitBot.enabled)
-        {
-            s_State.accumulatedX = 0.0f;
-            s_State.accumulatedY = 0.0f;
-            s_State.outputX = 0;
-            s_State.outputY = 0;
-            s_State.applied = false;
-        }
-        else if (moveX != 0 || moveY != 0)
+        if (moveX != 0 || moveY != 0)
         {
             s_State.accumulatedX -= static_cast<float>(moveX);
             s_State.accumulatedY -= static_cast<float>(moveY);

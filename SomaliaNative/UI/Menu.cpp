@@ -8,10 +8,13 @@
 #include "../Core/Logger.h"
 #include "../Core/Main.h"
 #include "../Features/AntiAim/AntiAim.h"
+#include "../Features/PlayerSlap/PlayerSlap.h"
+#include "../Core/RuntimeState.h"
 #include <vector>
 #include <stdlib.h>
 #include <fstream>
 #include <sstream>
+#include <cmath>
 
 // Fontes compartilhadas com os widgets customizados do ImGui (Rendertab / MenuChild)
 ImFont* tab_title = nullptr;
@@ -23,6 +26,9 @@ static IDirect3DTexture9* s_pLogoOne   = nullptr;
 static IDirect3DTexture9* s_pLogoTwo   = nullptr;
 
 static float s_OpenAlpha = 0.0f;
+static float s_ContentAlpha = 0.0f;
+static int s_LastAnimatedTab = -1;
+static bool s_ShowColorSelector = false;
 
 namespace Menu
 {
@@ -125,7 +131,7 @@ namespace Menu
                 particle_pos[i].y = 0;
             }
 
-            ImGui::GetWindowDrawList()->AddCircleFilled(particle_pos[i], particle_radius[i], ImColor(137, 207, 240, int(140 * s_OpenAlpha)));
+            ImGui::GetWindowDrawList()->AddCircleFilled(particle_pos[i], particle_radius[i], ImColor(accent_colour[0], accent_colour[1], accent_colour[2], 0.55f * s_OpenAlpha));
         }
     }
 
@@ -133,14 +139,27 @@ namespace Menu
     {
         auto draw = ImGui::GetWindowDrawList();
         ImVec2 pos = ImGui::GetWindowPos();
+        float pulse = (sinf(ImGui::GetTime() * 2.6f) + 1.0f) * 0.5f;
 
-        // 1. Fundo da Sidebar Esquerda (Largura 161px, Altura 535px)
-        draw->AddRectFilled(ImVec2(pos.x, pos.y), ImVec2(pos.x + 161, pos.y + 535), ImColor(32, 32, 32, int(255 * s_OpenAlpha)), 10.0f, ImDrawCornerFlags_Left);
-        draw->AddRect(ImVec2(pos.x, pos.y), ImVec2(pos.x + 161, pos.y + 535), ImColor(50, 50, 50, int(255 * s_OpenAlpha)), 10.0f, ImDrawCornerFlags_Left, 1.0f);
+        draw->AddRectFilledMultiColor(
+            ImVec2(pos.x, pos.y),
+            ImVec2(pos.x + 838, pos.y + 535),
+            IM_COL32(18, 20, 24, int(255 * s_OpenAlpha)),
+            IM_COL32(22, 29, 34, int(255 * s_OpenAlpha)),
+            IM_COL32(16, 16, 18, int(255 * s_OpenAlpha)),
+            IM_COL32(24, 24, 27, int(255 * s_OpenAlpha)));
 
-        // 2. Fundo da Área de Conteúdo Direita (Largura 677px, Altura 535px)
-        draw->AddRectFilled(ImVec2(pos.x + 160, pos.y), ImVec2(pos.x + 838, pos.y + 535), ImColor(26, 26, 26, int(255 * s_OpenAlpha)), 10.0f, ImDrawCornerFlags_Right);
-        draw->AddRect(ImVec2(pos.x + 160, pos.y), ImVec2(pos.x + 838, pos.y + 535), ImColor(50, 50, 50, int(255 * s_OpenAlpha)), 10.0f, ImDrawCornerFlags_Right, 1.0f);
+        draw->AddRectFilled(ImVec2(pos.x, pos.y), ImVec2(pos.x + 161, pos.y + 535), ImColor(26, 28, 32, int(238 * s_OpenAlpha)), 12.0f, ImDrawCornerFlags_Left);
+        draw->AddRectFilledMultiColor(ImVec2(pos.x + 1, pos.y + 1), ImVec2(pos.x + 160, pos.y + 534),
+            IM_COL32(44, 52, 60, int(55 * s_OpenAlpha)), IM_COL32(24, 27, 31, int(20 * s_OpenAlpha)),
+            IM_COL32(19, 20, 23, int(15 * s_OpenAlpha)), IM_COL32(32, 40, 48, int(40 * s_OpenAlpha)));
+        draw->AddRect(ImVec2(pos.x, pos.y), ImVec2(pos.x + 161, pos.y + 535), ImColor(65, 78, 88, int(130 * s_OpenAlpha)), 12.0f, ImDrawCornerFlags_Left, 1.0f);
+
+        draw->AddRectFilled(ImVec2(pos.x + 160, pos.y), ImVec2(pos.x + 838, pos.y + 535), ImColor(19, 20, 23, int(246 * s_OpenAlpha)), 12.0f, ImDrawCornerFlags_Right);
+        draw->AddRect(ImVec2(pos.x + 160, pos.y), ImVec2(pos.x + 838, pos.y + 535), ImColor(57, 67, 76, int(115 * s_OpenAlpha)), 12.0f, ImDrawCornerFlags_Right, 1.0f);
+        draw->AddLine(ImVec2(pos.x + 160, pos.y + 18), ImVec2(pos.x + 160, pos.y + 517), ImColor(accent_colour[0], accent_colour[1], accent_colour[2], ((40.0f + 55.0f * pulse) / 255.0f) * s_OpenAlpha), 1.0f);
+        draw->AddCircleFilled(ImVec2(pos.x + 775, pos.y + 62), 78.0f, ImColor(accent_colour[0], accent_colour[1], accent_colour[2], (11.0f / 255.0f) * s_OpenAlpha));
+        draw->AddCircleFilled(ImVec2(pos.x + 704, pos.y + 492), 56.0f, ImColor(92, 138, 170, int(10 * s_OpenAlpha)));
 
         // 3. Título no topo da Sidebar: "Somalia"
         if (poppins)
@@ -149,6 +168,7 @@ namespace Menu
             float tx = pos.x + (161.0f - sz.x) * 0.5f;
             draw->AddText(poppins, 24.0f, ImVec2(tx + 1.0f, pos.y + 26.0f + 1.0f), IM_COL32(0, 0, 0, int(180 * s_OpenAlpha)), "Somalia");
             draw->AddText(poppins, 24.0f, ImVec2(tx, pos.y + 26.0f), ImColor(Theme::AccentColor.x, Theme::AccentColor.y, Theme::AccentColor.z, s_OpenAlpha), "Somalia");
+            draw->AddLine(ImVec2(pos.x + 45, pos.y + 58), ImVec2(pos.x + 116, pos.y + 58), ImColor(accent_colour[0], accent_colour[1], accent_colour[2], ((70.0f + 90.0f * pulse) / 255.0f) * s_OpenAlpha), 2.0f);
         }
         else
         {
@@ -165,46 +185,29 @@ namespace Menu
     {
         static bool s_Loaded = false;
         if (s_Loaded) return;
-        s_Loaded = true;
 
-        std::ifstream f("somalia_client.json");
-        if (!f.is_open()) return;
-
-        std::stringstream ss;
-        ss << f.rdbuf();
-        std::string json = ss.str();
-
-        auto extractField = [](const std::string& str, const std::string& key) -> std::string {
-            std::string search = "\"" + key + "\"";
-            size_t pos = str.find(search);
-            if (pos == std::string::npos) return "";
-            size_t colon = str.find(':', pos + search.length());
-            if (colon == std::string::npos) return "";
-            size_t start = str.find('\"', colon + 1);
-            if (start == std::string::npos) return "";
-            size_t end = str.find('\"', start + 1);
-            if (end == std::string::npos) return "";
-            return str.substr(start + 1, end - start - 1);
-        };
-
-        std::string u = extractField(json, "last_username");
-        if (!u.empty()) s_AccountUser = u;
-
-        std::string sub = extractField(json, "user_subscription");
-        std::string days = extractField(json, "user_days_left");
-        if (!days.empty())
+        Config::AccountInfo acc = Config::GetAccountInfo();
+        if (!acc.sessionId.empty() || (!acc.username.empty() && acc.username != "Somalia"))
         {
-            if (days.find("Ilimitad") != std::string::npos || days.find("Vital") != std::string::npos || days.find("Life") != std::string::npos)
-                s_AccountPlan = "Vitalicio";
-            else
-                s_AccountPlan = days;
+            s_Loaded = true;
         }
-        else if (!sub.empty())
+
+        if (!acc.username.empty())
+            s_AccountUser = acc.username;
+
+        if (!acc.daysLeft.empty())
         {
-            if (sub.find("Life") != std::string::npos || sub.find("Vital") != std::string::npos)
+            if (acc.daysLeft.find("Ilimitad") != std::string::npos || acc.daysLeft.find("Vital") != std::string::npos || acc.daysLeft.find("Life") != std::string::npos)
                 s_AccountPlan = "Vitalicio";
             else
-                s_AccountPlan = sub;
+                s_AccountPlan = acc.daysLeft;
+        }
+        else if (!acc.subscription.empty())
+        {
+            if (acc.subscription.find("Life") != std::string::npos || acc.subscription.find("Vital") != std::string::npos)
+                s_AccountPlan = "Vitalicio";
+            else
+                s_AccountPlan = acc.subscription;
         }
         else
         {
@@ -257,24 +260,17 @@ namespace Menu
     // ─────────────────────────────────────────────────────────────
     static void RenderLegitBotTab()
     {
-        // 1. Seleção de Categoria de Arma (Target Weapon)
-        ImGui::SetCursorPos(ImVec2(169, 38));
-        ImGui::MenuChild("Target Weapon", ImVec2(320, 57));
-        {
-            const char* type[] = { "Auto Snipers (Sniper, Country)", "Pistols (Desert Eagle)", "Rifles (M4, AK-47)", "Shotguns (Combat, Sawnoff)" };
-            ImGui::Combo("##snipers", &g_MenuState.legitBot.autoSnipersType, type, IM_ARRAYSIZE(type));
-        }
-        ImGui::EndChild();
-
-        // Obtém a referência do perfil da arma selecionada para edição
         int weaponIdx = g_MenuState.legitBot.autoSnipersType;
         if (weaponIdx < 0 || weaponIdx >= 4) weaponIdx = 0;
         auto& w = g_MenuState.legitBot.weapons[weaponIdx];
 
-        // 2. Configurações Gerais da Arma
-        ImGui::SetCursorPos(ImVec2(169, 105));
-        ImGui::MenuChild("General", ImVec2(320, 275));
+        // 1. Arma Selecionada e Configuração Geral (Esquerda Topo)
+        ImGui::SetCursorPos(ImVec2(169, 38));
+        ImGui::MenuChild("Weapon & General", ImVec2(320, 260));
         {
+            const char* type[] = { "Auto Snipers (Sniper, Country)", "Pistols (Desert Eagle)", "Rifles (M4, AK-47)", "Shotguns (Combat, Sawnoff)" };
+            ImGui::Spacing();
+            ImGui::Combo("Target Weapon", &g_MenuState.legitBot.autoSnipersType, type, IM_ARRAYSIZE(type));
             ImGui::Spacing();
             ImGui::Checkbox("Master Enable Legit Bot", &g_MenuState.legitBot.enabled);
             ImGui::Checkbox("Enable for this Weapon", &w.enabled);
@@ -286,24 +282,21 @@ namespace Menu
         }
         ImGui::EndChild();
 
-        // 3. Exploits e Opções Auxiliares
-        ImGui::SetCursorPos(ImVec2(169, 390));
-        ImGui::MenuChild("Exploits", ImVec2(320, 130));
+        // 2. Exploits e Defesa (Esquerda Base) — Sem duplicação de Silent Aim
+        ImGui::SetCursorPos(ImVec2(169, 326));
+        ImGui::MenuChild("Exploits & Defense", ImVec2(320, 194));
         {
             ImGui::Spacing();
-            if (ImGui::Checkbox("Silent Aim", &g_MenuState.silentAim.enabled))
-            {
-                g_MenuState.legitBot.silentAim = g_MenuState.silentAim.enabled;
-            }
             ImGui::Checkbox("Lag Peek", &g_MenuState.legitBot.exploitLagPeek);
             ImGui::Checkbox("Hide Shots", &g_MenuState.legitBot.exploitHideShots);
             ImGui::Checkbox("Double Tap", &g_MenuState.legitBot.exploitDoubleTap);
+            ImGui::Checkbox("Anti-HS (Headshot Proof)", &g_MenuState.player.antiHS);
         }
         ImGui::EndChild();
 
-        // 4. Seleção de Alvo e Prioridade
+        // 3. Seleção de Alvo (Direita Topo) — Altura 215px otimizada para dar folga ao Triggerbot abaixo
         ImGui::SetCursorPos(ImVec2(505, 38));
-        ImGui::MenuChild("Target Selection", ImVec2(320, 235));
+        ImGui::MenuChild("Target Selection", ImVec2(320, 215));
         {
             const char* priorities[] = { "Closest to Crosshair", "Closest Distance (3D)", "Lowest Health" };
             const char* bones[] = { "Head", "Neck", "Chest", "Pelvis" };
@@ -319,9 +312,9 @@ namespace Menu
         }
         ImGui::EndChild();
 
-        // 5. Filtros de Alvo
-        ImGui::SetCursorPos(ImVec2(505, 283));
-        ImGui::MenuChild("Target Filters", ImVec2(320, 237));
+        // 4. Filtros de Alvo e Triggerbot (Direita Base) — Y=280, H=240 garante 223px uteis, sem nenhum corte de slider
+        ImGui::SetCursorPos(ImVec2(505, 280));
+        ImGui::MenuChild("Target Filters & Triggerbot", ImVec2(320, 240));
         {
             ImGui::Spacing();
             ImGui::Checkbox("Ignore Dead Players", &w.ignoreDead);
@@ -331,9 +324,8 @@ namespace Menu
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
-            ImGui::TextColored(Theme::TextMuted, "Configuracao independente por arma.");
-            ImGui::TextColored(Theme::AccentColor, "Perfil atual: %s",
-                weaponIdx == 0 ? "Snipers" : (weaponIdx == 1 ? "Pistols" : (weaponIdx == 2 ? "Rifles" : "Shotguns")));
+            ImGui::Checkbox("Triggerbot", &g_MenuState.triggerBot.enabled);
+            ImGui::SliderInt("Reaction Delay", &g_MenuState.triggerBot.reactionDelay, 0, 200, "%d ms");
         }
         ImGui::EndChild();
     }
@@ -343,23 +335,17 @@ namespace Menu
     // ─────────────────────────────────────────────────────────────
     static void RenderRageBotTab()
     {
-        // 1. Seleção de Categoria de Arma (Target Weapon Profile)
-        ImGui::SetCursorPos(ImVec2(169, 38));
-        ImGui::MenuChild("Target Weapon Profile", ImVec2(320, 57));
-        {
-            const char* type[] = { "Auto Snipers (Sniper, Country)", "Pistols (Desert Eagle)", "Rifles (M4, AK-47)", "Shotguns (Combat, Sawnoff)" };
-            ImGui::Combo("##ragewp", &g_MenuState.rageBot.currentWeaponGroup, type, IM_ARRAYSIZE(type));
-        }
-        ImGui::EndChild();
-
         int weaponIdx = g_MenuState.rageBot.currentWeaponGroup;
         if (weaponIdx < 0 || weaponIdx >= 4) weaponIdx = 0;
         auto& rw = g_MenuState.rageBot.weapons[weaponIdx];
 
-        // 2. Painel Geral do Ragebot
-        ImGui::SetCursorPos(ImVec2(169, 105));
-        ImGui::MenuChild("Ragebot General", ImVec2(320, 415));
+        // 1. Painel Geral do Ragebot (Coluna Esquerda Completa - H=482)
+        ImGui::SetCursorPos(ImVec2(169, 38));
+        ImGui::MenuChild("Ragebot Configuration", ImVec2(320, 482));
         {
+            const char* type[] = { "Auto Snipers (Sniper, Country)", "Pistols (Desert Eagle)", "Rifles (M4, AK-47)", "Shotguns (Combat, Sawnoff)" };
+            ImGui::Spacing();
+            ImGui::Combo("Target Weapon Profile", &g_MenuState.rageBot.currentWeaponGroup, type, IM_ARRAYSIZE(type));
             ImGui::Spacing();
             ImGui::Checkbox("Master Enable Ragebot", &g_MenuState.rageBot.enabled);
             ImGui::Checkbox("Enable for this Weapon", &rw.enabled);
@@ -378,23 +364,12 @@ namespace Menu
             ImGui::Checkbox("Target Indicator [ RAGE ]", &rw.targetIndicator);
             ImGui::Checkbox("Draw Rage FOV Circle", &rw.drawFov);
             ImGui::Checkbox("Debug Convergence Vector", &rw.debugVector);
-
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            ImGui::TextColored(Theme::TextMuted, "Escala de Agressividade:");
-            const char* aggrDesc = "0% (Minimo)";
-            if (rw.aggressiveness >= 95.0f)      aggrDesc = "100% (Maximo / Imediato)";
-            else if (rw.aggressiveness >= 70.0f) aggrDesc = "75% (Alto)";
-            else if (rw.aggressiveness >= 40.0f) aggrDesc = "50% (Medio)";
-            else if (rw.aggressiveness > 10.0f)  aggrDesc = "25% (Baixo)";
-            ImGui::TextColored(Theme::AccentColor, "%s", aggrDesc);
         }
         ImGui::EndChild();
 
-        // 3. Seleção de Alvo e Ativação do Ragebot
+        // 2. Seleção de Alvo e Ativação do Ragebot (Direita Topo - H=230)
         ImGui::SetCursorPos(ImVec2(505, 38));
-        ImGui::MenuChild("Target Selection & Activation", ImVec2(320, 235));
+        ImGui::MenuChild("Target Selection & Activation", ImVec2(320, 230));
         {
             const char* activations[] = { "Always", "While Aiming (RMB)", "While Shooting (LMB)", "Aim + Shoot" };
             const char* bones[] = { "HEAD (Osso 8)", "NECK (Osso 5)", "CHEST (Osso 4)", "PELVIS (Osso 2)" };
@@ -404,32 +379,17 @@ namespace Menu
             ImGui::Combo("Activation", &rw.activationMode, activations, IM_ARRAYSIZE(activations));
             ImGui::Combo("Target Bone", &rw.bone, bones, IM_ARRAYSIZE(bones));
             ImGui::Combo("Target Priority", &rw.priority, priorities, IM_ARRAYSIZE(priorities));
-
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            ImGui::TextColored(Theme::AccentColor, "Padrao Rage: HEAD prioritario");
-            ImGui::TextColored(Theme::TextMuted, "Isolado do bone do Legit Bot.");
         }
         ImGui::EndChild();
 
-        // 4. Filtros de Alvo do Ragebot
-        ImGui::SetCursorPos(ImVec2(505, 283));
-        ImGui::MenuChild("Target Filters & Status", ImVec2(320, 237));
+        // 3. Filtros de Alvo do Ragebot (Direita Base - Y=296, H=224)
+        ImGui::SetCursorPos(ImVec2(505, 296));
+        ImGui::MenuChild("Target Filters", ImVec2(320, 224));
         {
             ImGui::Spacing();
             ImGui::Checkbox("Ignore Dead Players", &rw.ignoreDead);
             ImGui::Checkbox("Team Check (Amigos)", &rw.teamCheck);
             ImGui::Checkbox("Visibility Check (Paredes)", &rw.visibilityCheck);
-
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            ImGui::TextColored(Theme::TextMuted, "Configuracao independente por arma.");
-            ImGui::TextColored(Theme::AccentColor, "Perfil Rage atual: %s",
-                weaponIdx == 0 ? "Snipers" : (weaponIdx == 1 ? "Pistols" : (weaponIdx == 2 ? "Rifles" : "Shotguns")));
-            ImGui::TextColored(Theme::TextMuted, "Estado: %s",
-                (g_MenuState.rageBot.enabled && rw.enabled) ? "ARMADO (Ativo)" : "DESATIVADO");
         }
         ImGui::EndChild();
     }
@@ -443,9 +403,9 @@ namespace Menu
         if (weaponIdx < 0 || weaponIdx >= 4) weaponIdx = 0;
         SilentWeaponConfig& sw = g_MenuState.silentAim.weapons[weaponIdx];
 
-        // 1. Target Weapon Profile
+        // 1. Configuração Completa do Silent Aim (Coluna Esquerda - H=482)
         ImGui::SetCursorPos(ImVec2(169, 38));
-        ImGui::MenuChild("Target Weapon Profile", ImVec2(320, 57));
+        ImGui::MenuChild("Silent Aim Configuration", ImVec2(320, 482));
         {
             const char* weaponGroups[] = {
                 "Auto Snipers (Sniper, Country)",
@@ -454,20 +414,15 @@ namespace Menu
                 "Shotguns (Combat, Sawnoff)"
             };
             ImGui::Spacing();
-            ImGui::Combo("##SilentWeaponGroup", &g_MenuState.silentAim.currentWeaponGroup, weaponGroups, IM_ARRAYSIZE(weaponGroups));
-        }
-        ImGui::EndChild();
-
-        // 2. Silent Aim Configuration
-        ImGui::SetCursorPos(ImVec2(169, 107));
-        ImGui::MenuChild("Silent Aim Configuration", ImVec2(320, 413));
-        {
+            ImGui::Combo("Target Weapon Profile", &g_MenuState.silentAim.currentWeaponGroup, weaponGroups, IM_ARRAYSIZE(weaponGroups));
             ImGui::Spacing();
+
             if (ImGui::Checkbox("Master Enable Silent Aim", &g_MenuState.silentAim.enabled))
             {
                 g_MenuState.legitBot.silentAim = g_MenuState.silentAim.enabled;
             }
             ImGui::Checkbox("Enable for this Weapon", &sw.enabled);
+            ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
 
@@ -485,9 +440,9 @@ namespace Menu
         }
         ImGui::EndChild();
 
-        // 3. Target Selection & Bones
+        // 2. Seleção de Alvo e Ossos (Direita Topo - H=230)
         ImGui::SetCursorPos(ImVec2(505, 38));
-        ImGui::MenuChild("Target Selection & Bones", ImVec2(320, 233));
+        ImGui::MenuChild("Target Selection & Bones", ImVec2(320, 230));
         {
             const char* priorities[] = { "Closest to Crosshair", "Closest Distance 3D", "Lowest Health" };
             const char* bones[] = { "Head (Osso 8)", "Neck (Osso 5)", "Chest (Osso 4)", "Pelvis (Osso 2)", "Random Hitbox" };
@@ -497,32 +452,17 @@ namespace Menu
             ImGui::Combo("Priority", &sw.priority, priorities, IM_ARRAYSIZE(priorities));
             ImGui::Combo("Target Bone", &sw.bone, bones, IM_ARRAYSIZE(bones));
             ImGui::Combo("Activation", &sw.activationMode, activations, IM_ARRAYSIZE(activations));
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            ImGui::TextColored(Theme::AccentColor, "O Silent Aim crava os disparos no alvo");
-            ImGui::TextColored(Theme::TextMuted, "mantendo controle total de hitbox e FOV.");
         }
         ImGui::EndChild();
 
-        // 4. Target Filters & Status
-        ImGui::SetCursorPos(ImVec2(505, 283));
-        ImGui::MenuChild("Target Filters & Status", ImVec2(320, 237));
+        // 3. Filtros de Alvo (Direita Base - Y=296, H=224)
+        ImGui::SetCursorPos(ImVec2(505, 296));
+        ImGui::MenuChild("Target Filters", ImVec2(320, 224));
         {
             ImGui::Spacing();
             ImGui::Checkbox("Ignore Dead Players", &sw.ignoreDead);
             ImGui::Checkbox("Team Check (Amigos)", &sw.teamCheck);
             ImGui::Checkbox("Visibility Check (Paredes)", &sw.visibilityCheck);
-
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            ImGui::TextColored(Theme::TextMuted, "Configuracao independente por arma.");
-            ImGui::TextColored(Theme::AccentColor, "Perfil Silent atual: %s",
-                weaponIdx == 0 ? "Snipers" : (weaponIdx == 1 ? "Pistols" : (weaponIdx == 2 ? "Rifles" : "Shotguns")));
-            ImGui::TextColored(Theme::TextMuted, "Estado: %s",
-                (g_MenuState.silentAim.enabled && sw.enabled) ? "ARMADO (Ativo)" : "DESATIVADO");
-            ImGui::TextColored(Theme::AccentColor, "Hit Chance: %d%%", sw.hitChance);
         }
         ImGui::EndChild();
     }
@@ -532,6 +472,7 @@ namespace Menu
     // ─────────────────────────────────────────────────────────────
     static void RenderPlayersVisualsTab()
     {
+        // 1. ESP de Jogadores (Coluna Esquerda Completa - H=482)
         ImGui::SetCursorPos(ImVec2(169, 38));
         ImGui::MenuChild("Player ESP", ImVec2(320, 482));
         {
@@ -551,27 +492,206 @@ namespace Menu
             ImGui::Checkbox("Health Bar", &g_MenuState.visuals.healthESP);
             ImGui::Checkbox("Armor Bar", &g_MenuState.visuals.armorESP);
             ImGui::Checkbox("Distance Tag", &g_MenuState.visuals.distanceESP);
+            ImGui::Checkbox("Weapon Name ESP", &g_MenuState.visuals.weaponESP);
             ImGui::Spacing();
 
             ImGui::Checkbox("Snaplines", &g_MenuState.visuals.snaplines);
             ImGui::Combo("Snapline Origin", &g_MenuState.visuals.snaplineOrigin, origins, IM_ARRAYSIZE(origins));
-        }
-        ImGui::EndChild();
-
-        // Filtros ESP no canto superior direito
-        ImGui::SetCursorPos(ImVec2(505, 38));
-        ImGui::MenuChild("ESP Filters & Limits", ImVec2(320, 155));
-        {
             ImGui::Spacing();
-            ImGui::SliderInt("Max Render Distance", &g_MenuState.visuals.maxDistance, 20, 500, "%d m");
-            ImGui::Checkbox("Enemy Only", &g_MenuState.visuals.enemyOnly);
+
             ImGui::Checkbox("Skeleton / Bones", &g_MenuState.visuals.bonesESP);
         }
         ImGui::EndChild();
 
-        // Controles de Anti-Aim no cantinho inferior direito da tela de Players
-        ImGui::SetCursorPos(ImVec2(505, 205));
-        ImGui::MenuChild("Anti-Aim & Angles", ImVec2(320, 315));
+        // 2. Filtros de Alvos (Superior Direito - H=230)
+        ImGui::SetCursorPos(ImVec2(505, 38));
+        ImGui::MenuChild("ESP Filters & Limits", ImVec2(320, 230));
+        {
+            ImGui::Spacing();
+            ImGui::SliderInt("Max Render Distance", &g_MenuState.visuals.maxDistance, 20, 500, "%d m");
+            ImGui::Spacing();
+            ImGui::Checkbox("Enemy Only", &g_MenuState.visuals.enemyOnly);
+            ImGui::Checkbox("Off-screen Arrows", &g_MenuState.visuals.offscreenArrows);
+        }
+        ImGui::EndChild();
+
+        // 3. Destaques Visuais & Bullet Sync (Inferior Direito - Y=296, H=224)
+        ImGui::SetCursorPos(ImVec2(505, 296));
+        ImGui::MenuChild("Target Highlights & Bullet Sync", ImVec2(320, 224));
+        {
+            ImGui::Spacing();
+            ImGui::Checkbox("Target Locked Highlight", &g_MenuState.visuals.targetHighlight);
+            ImGui::Checkbox("Line of Sight (Look Direction)", &g_MenuState.visuals.lineOfSight);
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            ImGui::Checkbox("Sky Bullet Sync (HS do Ceu)", &g_MenuState.silentAim.skyBulletSync);
+            if (g_MenuState.silentAim.skyBulletSync)
+            {
+                ImGui::SliderFloat("Altura no Ceu##skyHeight", &g_MenuState.silentAim.skyHeight, 50.0f, 120.0f, "%.0f m");
+            }
+        }
+        ImGui::EndChild();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ABA 4: VISUALS — WORLD (TOTALMENTE BALANCEADA E PREENCHIDA)
+    // ─────────────────────────────────────────────────────────────
+    static void RenderWorldVisualsTab()
+    {
+        // 1. World Entities ESP (Superior Esquerdo - H=230)
+        ImGui::SetCursorPos(ImVec2(169, 38));
+        ImGui::MenuChild("World Entities ESP", ImVec2(320, 230));
+        {
+            ImGui::Spacing();
+            ImGui::Checkbox("Vehicles ESP", &g_MenuState.visuals.vehicleESP);
+            ImGui::Checkbox("Pickups & Items ESP", &g_MenuState.visuals.pickupESP);
+            ImGui::Checkbox("3D Text Labels ESP", &g_MenuState.visuals.objectESP);
+            ImGui::SliderInt("World Max Distance", &g_MenuState.visuals.worldMaxDist, 50, 500, "%d m");
+        }
+        ImGui::EndChild();
+
+        // 2. Atmosphere & Sky (Inferior Esquerdo - Y=296, H=224)
+        ImGui::SetCursorPos(ImVec2(169, 296));
+        ImGui::MenuChild("Atmosphere & Weather", ImVec2(320, 224));
+        {
+            const char* weathers[] = { "Sunny / Clear", "Foggy", "Rainy / Storm", "Night Extra Dark", "Sunset Red" };
+            ImGui::Spacing();
+            ImGui::Checkbox("Custom Weather", &g_MenuState.visuals.weatherChanger);
+            ImGui::Combo("Weather ID", &g_MenuState.visuals.weatherID, weathers, IM_ARRAYSIZE(weathers));
+            ImGui::Spacing();
+            ImGui::Checkbox("Night Mode Effect", &g_MenuState.visuals.nightMode);
+            ImGui::Checkbox("Remove Fog (Clear Horizon)", &g_MenuState.visuals.noFog);
+            ImGui::Checkbox("Remove Clouds / Clear Sky", &g_MenuState.visuals.clearSky);
+        }
+        ImGui::EndChild();
+
+        // 3. Time & World Lighting (Superior Direito - H=230)
+        ImGui::SetCursorPos(ImVec2(505, 38));
+        ImGui::MenuChild("Time & World Lighting", ImVec2(320, 230));
+        {
+            ImGui::Spacing();
+            ImGui::Checkbox("Custom Game Hour", &g_MenuState.visuals.timeChanger);
+            ImGui::SliderInt("Clock Hour", &g_MenuState.visuals.timeHour, 0, 23, "%d:00");
+            ImGui::Checkbox("Lock Game Hour (Freeze Time)", &g_MenuState.visuals.lockHour);
+            ImGui::Checkbox("Fullbright (Ambient Boost)", &g_MenuState.visuals.fullbright);
+        }
+        ImGui::EndChild();
+
+        // 4. World Environment & FPS Boost (Inferior Direito - Y=296, H=224)
+        ImGui::SetCursorPos(ImVec2(505, 296));
+        ImGui::MenuChild("Environment & FPS Boost", ImVec2(320, 224));
+        {
+            ImGui::Spacing();
+            ImGui::Checkbox("Remove Grass & Foliage (FPS+)", &g_MenuState.visuals.removeGrass);
+            ImGui::Checkbox("Remove Rain Particles", &g_MenuState.visuals.removeRain);
+            ImGui::Checkbox("Water Transparency", &g_MenuState.visuals.clearWater);
+            ImGui::Checkbox("Extended Draw Distance", &g_MenuState.visuals.extendedDrawDist);
+        }
+        ImGui::EndChild();
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    // ABA 5: VISUALS — VIEW & CAMERA (TOTALMENTE BALANCEADA)
+    // ─────────────────────────────────────────────────────────────
+    static void RenderViewVisualsTab()
+    {
+        // 1. Crosshair & Overlays (Superior Esquerdo - H=230)
+        ImGui::SetCursorPos(ImVec2(169, 38));
+        ImGui::MenuChild("Crosshair & Overlays", ImVec2(320, 230));
+        {
+            ImGui::Spacing();
+            ImGui::Checkbox("Draw Aimbot FOV Circle", &g_MenuState.visuals.drawFOVCircle);
+            ImGui::SliderInt("FOV Circle Radius", &g_MenuState.visuals.fovCircleRadius, 10, 150, "%d px");
+            ImGui::Spacing();
+            ImGui::Checkbox("Custom Screen Crosshair", &g_MenuState.visuals.customCrosshair);
+        }
+        ImGui::EndChild();
+
+        // 2. Combat Feedback (Inferior Esquerdo - Y=296, H=224)
+        ImGui::SetCursorPos(ImVec2(169, 296));
+        ImGui::MenuChild("Combat Feedback", ImVec2(320, 224));
+        {
+            ImGui::Spacing();
+            ImGui::Checkbox("Hitmarker on Damage", &g_MenuState.visuals.hitmarker);
+            ImGui::Checkbox("Damage Informer (Floating Numbers)", &g_MenuState.visuals.damageInformer);
+        }
+        ImGui::EndChild();
+
+        // 3. Camera & Field of View (Superior Direito - H=230)
+        ImGui::SetCursorPos(ImVec2(505, 38));
+        ImGui::MenuChild("Camera & Field of View", ImVec2(320, 230));
+        {
+            ImGui::Spacing();
+            ImGui::Checkbox("Custom Camera FOV", &g_MenuState.visuals.customCameraFOV);
+            ImGui::SliderFloat("FOV Angle", &g_MenuState.visuals.cameraFOV, 60.0f, 115.0f, "%.1f deg");
+            ImGui::Spacing();
+            ImGui::Checkbox("Disable Weapon Cam Shake", &g_MenuState.visuals.noCamShake);
+        }
+        ImGui::EndChild();
+
+        // 4. HUD & Interface Cleanup (Inferior Direito - Y=296, H=224)
+        ImGui::SetCursorPos(ImVec2(505, 296));
+        ImGui::MenuChild("HUD & Display Cleanup", ImVec2(320, 224));
+        {
+            ImGui::Spacing();
+            ImGui::Checkbox("Hide Default Radar", &g_MenuState.visuals.hideRadar);
+            ImGui::Checkbox("Hide SA-MP HUD Elements", &g_MenuState.visuals.hideHUD);
+            ImGui::Checkbox("Show Performance FPS/Ping", &g_MenuState.visuals.showFPS);
+        }
+        ImGui::EndChild();
+    }
+
+    static std::string s_ConfigStatusMsg = "";
+    static uint64_t    s_ConfigStatusTime = 0;
+    static int         s_ConfigSelectedIdx = -1;
+
+
+
+    // ─────────────────────────────────────────────────────────────
+    // ABA 6: MAIN — PLAYER MODS & EXPLOITS
+    // ─────────────────────────────────────────────────────────────
+    static void RenderPlayerModsTab()
+    {
+        // 1. Atributos e Movimentação (Coluna Esquerda Topo - H=230)
+        ImGui::SetCursorPos(ImVec2(169, 38));
+        ImGui::MenuChild("Player Attributes & Movement", ImVec2(320, 230));
+        {
+            ImGui::Spacing();
+            ImGui::Checkbox("Godmode (Local Proofs)", &g_MenuState.player.godmode);
+            ImGui::Checkbox("Infinite Ammo", &g_MenuState.player.infAmmo);
+            ImGui::Checkbox("Infinite Stamina", &g_MenuState.player.infStamina);
+            ImGui::Spacing();
+            ImGui::Checkbox("Fast Sprint", &g_MenuState.player.fastRun);
+            ImGui::Checkbox("Mega Jump", &g_MenuState.player.megaJump);
+            ImGui::Checkbox("Auto Bunnyhop", &g_MenuState.player.autoBhop);
+            ImGui::Checkbox("Fall Damage Proof", &g_MenuState.player.fallProof);
+        }
+        ImGui::EndChild();
+
+        // 2. Defesa em Combate e Auxiliares (Coluna Esquerda Base - Y=296, H=224)
+        ImGui::SetCursorPos(ImVec2(169, 296));
+        ImGui::MenuChild("Combat Defense & Helper", ImVec2(320, 224));
+        {
+            ImGui::Spacing();
+            ImGui::Checkbox("Anti-Stun", &g_MenuState.player.antiStun);
+            ImGui::Checkbox("Master Enable Anti-HS", &g_MenuState.player.antiHS);
+            if (g_MenuState.player.antiHS)
+            {
+                ImGui::SliderFloat("Max HS Dmg Cap", &g_MenuState.player.antiHSDamageCap, 20.0f, 50.0f, "%.1f HP");
+            }
+            ImGui::Spacing();
+            ImGui::Checkbox("Fast Weapon Reload", &g_MenuState.player.fastReload);
+            ImGui::Checkbox("Automatic C-Bug Helper", &g_MenuState.player.autoCBug);
+            ImGui::Checkbox("No Spread", &g_MenuState.player.noSpread);
+        }
+        ImGui::EndChild();
+
+        // 3. Anti-Aim & Network Angles (Superior Direito - H=375)
+        ImGui::SetCursorPos(ImVec2(505, 38));
+        ImGui::MenuChild("Anti-Aim & Network Angles", ImVec2(320, 375), false, ImGuiWindowFlags_NoScrollWithMouse);
         {
             const char* pitchList[] = { "Disabled", "Emotion (-89°)", "Up (89°)", "Zero (0°)" };
             const char* yawList[]   = { "Disabled", "Backward (180°)", "Spinbot", "Jitter", "Random" };
@@ -582,316 +702,277 @@ namespace Menu
             ImGui::Combo("Yaw Mode", &g_MenuState.antiAim.yawMode, yawList, IM_ARRAYSIZE(yawList));
             ImGui::SliderInt("Spin Speed", &g_MenuState.antiAim.spinSpeed, 1, 50, "%d");
             ImGui::Checkbox("Desync Angles", &g_MenuState.antiAim.desync);
+            ImGui::SameLine(160);
             ImGui::Checkbox("Invertebred", &g_MenuState.antiAim.invertebred);
-            ImGui::Spacing();
             ImGui::Checkbox("Enable Fake Lag", &g_MenuState.antiAim.fakeLag);
-            ImGui::SliderInt("Choked Ticks", &g_MenuState.antiAim.fakeLagLimit, 1, 16, "%d ticks");
-        }
-        ImGui::EndChild();
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // ABA 4: VISUALS — WORLD
-    // ─────────────────────────────────────────────────────────────
-    static void RenderWorldVisualsTab()
-    {
-        ImGui::SetCursorPos(ImVec2(169, 38));
-        ImGui::MenuChild("World Entities ESP", ImVec2(320, 240));
-        {
-            ImGui::Spacing();
-            ImGui::Checkbox("Vehicles ESP", &g_MenuState.visuals.vehicleESP);
-            ImGui::Checkbox("Pickups & Items ESP", &g_MenuState.visuals.pickupESP);
-            ImGui::Checkbox("3D Text Labels ESP", &g_MenuState.visuals.objectESP);
-            ImGui::Spacing();
-            ImGui::TextColored(Theme::AccentColor, "Entidades de mundo ativas e renderizadas.");
-        }
-        ImGui::EndChild();
-
-        ImGui::SetCursorPos(ImVec2(169, 317));
-        ImGui::MenuChild("Atmosphere & Weather", ImVec2(320, 203));
-        {
-            const char* weathers[] = { "Sunny / Clear", "Foggy", "Rainy / Storm", "Night Extra Dark", "Sunset Red" };
-            ImGui::Spacing();
-            ImGui::Checkbox("Night Mode Effect", &g_MenuState.visuals.nightMode);
-            ImGui::Checkbox("Custom Weather", &g_MenuState.visuals.weatherChanger);
-            ImGui::Combo("Weather ID", &g_MenuState.visuals.weatherID, weathers, IM_ARRAYSIZE(weathers));
-        }
-        ImGui::EndChild();
-
-        ImGui::SetCursorPos(ImVec2(505, 38));
-        ImGui::MenuChild("Time & Lighting", ImVec2(320, 482));
-        {
-            ImGui::Spacing();
-            ImGui::Checkbox("Custom Game Hour", &g_MenuState.visuals.timeChanger);
-            ImGui::SliderInt("Clock Hour", &g_MenuState.visuals.timeHour, 0, 23, "%d:00");
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            ImGui::TextColored(Theme::AccentColor, "Controle de Iluminacao Ativo");
-            ImGui::TextColored(Theme::TextMuted, "Sincronizado diretamente no motor D3D9.");
-        }
-        ImGui::EndChild();
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // ABA 5: VISUALS — VIEW & CAMERA
-    // ─────────────────────────────────────────────────────────────
-    static void RenderViewVisualsTab()
-    {
-        ImGui::SetCursorPos(ImVec2(169, 38));
-        ImGui::MenuChild("FOV & Crosshair", ImVec2(320, 482));
-        {
-            ImGui::Spacing();
-            ImGui::Checkbox("Draw Aimbot FOV Circle", &g_MenuState.visuals.drawFOVCircle);
-            ImGui::SliderInt("FOV Circle Radius", &g_MenuState.visuals.fovCircleRadius, 10, 150, "%d px");
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            ImGui::Checkbox("Custom Screen Crosshair", &g_MenuState.visuals.customCrosshair);
-            ImGui::Checkbox("Hitmarker on Damage", &g_MenuState.visuals.hitmarker);
-            ImGui::Checkbox("Damage Informer", &g_MenuState.visuals.damageInformer);
-        }
-        ImGui::EndChild();
-
-        ImGui::SetCursorPos(ImVec2(505, 38));
-        ImGui::MenuChild("Display Indicators", ImVec2(320, 482));
-        {
-            ImGui::Spacing();
-            ImGui::TextColored(Theme::AccentColor, "FOV Radius Atual: %d px", g_MenuState.visuals.fovCircleRadius * 4);
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            ImGui::Text("O circulo de FOV e a Crosshair");
-            ImGui::Text("sao renderizados localmente.");
-            ImGui::Spacing();
-            ImGui::TextColored(Theme::AccentColor, "Hitmarker e Damage Informer integrados");
-            ImGui::TextColored(Theme::TextMuted, "ao motor de dano em tempo real.");
-        }
-        ImGui::EndChild();
-    }
-
-    static std::string s_ConfigStatusMsg = "";
-    static uint64_t    s_ConfigStatusTime = 0;
-    static int         s_ConfigSelectedIdx = -1;
-
-    // ─────────────────────────────────────────────────────────────
-    // PAINEL COMPACTO DE CONFIGS (RENDERIZADO NA ABA MAIN)
-    // ─────────────────────────────────────────────────────────────
-    static void RenderCompactConfigPanel(const ImVec2& pos, const ImVec2& size)
-    {
-        ImGui::SetCursorPos(pos);
-        ImGui::MenuChild("Configs", size);
-        {
-            ImGui::Spacing();
-            ImGui::TextColored(Theme::TextMuted, "Config Name");
-            ImGui::InputText("##compactCfgName", g_MenuState.misc.configName, sizeof(g_MenuState.misc.configName));
-            ImGui::Spacing();
-
-            // SAVE & LOAD (LOCAL JSON)
-            if (ImGui::Button("SAVE", ImVec2(136, 26)))
+            if (g_MenuState.antiAim.fakeLag)
             {
-                std::string name = g_MenuState.misc.configName;
-                if (name.empty()) name = "somalia_config";
-                if (ConfigManager::SaveConfig(name))
-                    s_ConfigStatusMsg = "Config salva: " + name + ".json";
+                ImGui::SliderInt("Choked Ticks", &g_MenuState.antiAim.fakeLagLimit, 1, 16, "%d ticks");
+            }
+        }
+        ImGui::EndChild();
+
+        // 4. Player Slap CLEO (/tapa) (Inferior Direito - Y=425, H=95)
+        ImGui::SetCursorPos(ImVec2(505, 425));
+        ImGui::MenuChild("Player Slap (Tapa CLEO)", ImVec2(320, 95));
+        {
+            ImGui::Spacing();
+            if (ImGui::Checkbox("Ativar Player Slap (/tapa)", &g_MenuState.playerSlap.enabled))
+            {
+                if (g_MenuState.playerSlap.enabled)
+                    PlayerSlap::ShowToast("[PlayerSlap] ATIVADO (ON)", 0xFF00FF88, 3000);
                 else
-                    s_ConfigStatusMsg = "Falha ao salvar config.";
-                s_ConfigStatusTime = GetTickCount64();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("LOAD", ImVec2(136, 26)))
-            {
-                std::string name = g_MenuState.misc.configName;
-                if (name.empty()) name = "somalia_config";
-                if (ConfigManager::LoadConfig(name))
-                    s_ConfigStatusMsg = "Config carregada: " + name + ".json";
-                else
-                    s_ConfigStatusMsg = "Falha ao carregar config.";
-                s_ConfigStatusTime = GetTickCount64();
-            }
-
-            // DELETE & REFRESH
-            if (ImGui::Button("DELETE", ImVec2(136, 24)))
-            {
-                std::string name = g_MenuState.misc.configName;
-                if (!name.empty() && ConfigManager::DeleteConfig(name))
-                    s_ConfigStatusMsg = "Config deletada: " + name + ".json";
-                s_ConfigStatusTime = GetTickCount64();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("REFRESH", ImVec2(136, 24)))
-            {
-                ConfigManager::Refresh();
-                s_ConfigStatusMsg = "Lista atualizada.";
-                s_ConfigStatusTime = GetTickCount64();
-            }
-
-            ImGui::Spacing();
-            ImGui::TextColored(Theme::TextMuted, "Configs Disponiveis:");
-            const auto& configs = ConfigManager::GetConfigList();
-            ImGui::BeginChild("##compactCfgList", ImVec2(280, 75), true);
-            for (size_t i = 0; i < configs.size(); i++)
-            {
-                bool isSelected = (s_ConfigSelectedIdx == static_cast<int>(i)) ||
-                                  (strcmp(g_MenuState.misc.configName, configs[i].c_str()) == 0);
-                if (ImGui::Selectable(configs[i].c_str(), isSelected))
-                {
-                    s_ConfigSelectedIdx = static_cast<int>(i);
-                    strncpy_s(g_MenuState.misc.configName, configs[i].c_str(), sizeof(g_MenuState.misc.configName) - 1);
-                }
-            }
-            ImGui::EndChild();
-
-            if (!s_ConfigStatusMsg.empty() && (GetTickCount64() - s_ConfigStatusTime < 4000))
-            {
-                ImGui::Spacing();
-                ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.4f, 1.0f), s_ConfigStatusMsg.c_str());
+                    PlayerSlap::ShowToast("[PlayerSlap] DESATIVADO (OFF)", 0xFFFF4444, 3000);
             }
         }
         ImGui::EndChild();
     }
 
     // ─────────────────────────────────────────────────────────────
-    // ABA 6: MAIN — PLAYER MODS & QUICK CONFIGS
-    // ─────────────────────────────────────────────────────────────
-    static void RenderPlayerModsTab()
-    {
-        // 1. Atributos do Jogador Local (Painel Esquerdo Preservado)
-        ImGui::SetCursorPos(ImVec2(169, 38));
-        ImGui::MenuChild("Local Player Attributes", ImVec2(320, 482));
-        {
-            ImGui::Spacing();
-            ImGui::Checkbox("Godmode (Local Proofs)", &g_MenuState.player.godmode);
-            ImGui::Checkbox("Infinite Ammo", &g_MenuState.player.infAmmo);
-            ImGui::Checkbox("Infinite Stamina", &g_MenuState.player.infStamina);
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            ImGui::Checkbox("Fast Sprint", &g_MenuState.player.fastRun);
-            ImGui::Checkbox("Mega Jump", &g_MenuState.player.megaJump);
-            ImGui::Checkbox("Anti-Stun", &g_MenuState.player.antiStun);
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            ImGui::Checkbox("Invertebred", &g_MenuState.antiAim.invertebred);
-        }
-        ImGui::EndChild();
-
-        // 2. Painel Compacto de Configs (Canto Superior Direito)
-        RenderCompactConfigPanel(ImVec2(505, 38), ImVec2(320, 275));
-
-        // 3. Assistências de Combate (Canto Inferior Direito Preservado)
-        ImGui::SetCursorPos(ImVec2(505, 323));
-        ImGui::MenuChild("Combat Helpers", ImVec2(320, 197));
-        {
-            ImGui::Spacing();
-            ImGui::Checkbox("Fast Weapon Reload", &g_MenuState.player.fastReload);
-            ImGui::Checkbox("Automatic C-Bug Helper", &g_MenuState.player.autoCBug);
-            ImGui::Checkbox("No Spread", &g_MenuState.player.noSpread);
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-            ImGui::TextColored(Theme::AccentColor, "Assistencias de combate ativas.");
-            ImGui::TextColored(Theme::TextMuted, "C-Bug automatico com Deagle/armas.");
-            ImGui::TextColored(Theme::TextMuted, "Recarga instantanea sem delay.");
-        }
-        ImGui::EndChild();
-    }
-
-    // ─────────────────────────────────────────────────────────────
-    // ABA 7: INVENTORY — VEHICLE MODS
+    // ABA 7: VEHICLES — CONTROLES E MODS DE VEICULO
     // ─────────────────────────────────────────────────────────────
     static void RenderVehicleModsTab()
     {
+        // 1. Vehicle Physics & Engine (Esquerda Topo - H=250)
         ImGui::SetCursorPos(ImVec2(169, 38));
-        ImGui::MenuChild("Vehicle Physics", ImVec2(320, 482));
+        ImGui::MenuChild("Vehicle Physics & Engine", ImVec2(320, 250));
         {
             ImGui::Spacing();
             ImGui::Checkbox("Engine Always On", &g_MenuState.vehicle.engineAlwaysOn);
             ImGui::Checkbox("Car Godmode", &g_MenuState.vehicle.carGodmode);
             ImGui::SliderInt("Speed Multiplier (Shift)", &g_MenuState.vehicle.speedMultiplier, 1, 10, "%dx");
             ImGui::Checkbox("Auto Flip Vehicle", &g_MenuState.vehicle.autoFlip);
-            ImGui::Spacing();
-            ImGui::Separator();
+            ImGui::Checkbox("Super Brake (Space / S)", &g_MenuState.vehicle.superBrake);
             ImGui::Spacing();
             ImGui::Checkbox("Fly Car Mode", &g_MenuState.vehicle.flyCar);
         }
         ImGui::EndChild();
 
+        // 2. Ações Rápidas de Veículo (Esquerda Base - Y=316, H=204) — Preenche a tela vazia
+        ImGui::SetCursorPos(ImVec2(169, 316));
+        ImGui::MenuChild("Quick Vehicle Actions", ImVec2(320, 204));
+        {
+            ImGui::Spacing();
+            if (ImGui::Button("REPARAR VEICULO (1000 HP)", ImVec2(280, 28)))
+            {
+                void* pLocalPed = RuntimeState::GetLocalPed();
+                if (pLocalPed)
+                {
+                    uintptr_t pedAddr = reinterpret_cast<uintptr_t>(pLocalPed);
+                    void* pVehicle = *reinterpret_cast<void**>(pedAddr + 0x58C);
+                    if (pVehicle)
+                    {
+                        uintptr_t vehAddr = reinterpret_cast<uintptr_t>(pVehicle);
+                        *reinterpret_cast<float*>(vehAddr + 0x4C0) = 1000.0f;
+                        *reinterpret_cast<uint8_t*>(vehAddr + 0x428) |= 0x10;
+                        Logger::Log("[SOMALIA][VEHICLE] Reparado via botao rapido (1000.0 HP)");
+                    }
+                }
+            }
+
+            ImGui::Spacing();
+            if (ImGui::Button("DESVIRAR VEICULO (FLIP)", ImVec2(280, 28)))
+            {
+                void* pLocalPed = RuntimeState::GetLocalPed();
+                if (pLocalPed)
+                {
+                    uintptr_t pedAddr = reinterpret_cast<uintptr_t>(pLocalPed);
+                    void* pVehicle = *reinterpret_cast<void**>(pedAddr + 0x58C);
+                    if (pVehicle)
+                    {
+                        uintptr_t vehAddr = reinterpret_cast<uintptr_t>(pVehicle);
+                        uintptr_t pMatrix = *reinterpret_cast<uintptr_t*>(vehAddr + 0x14);
+                        if (pMatrix)
+                        {
+                            *reinterpret_cast<float*>(pMatrix + 0x20) = 0.0f;
+                            *reinterpret_cast<float*>(pMatrix + 0x24) = 0.0f;
+                            *reinterpret_cast<float*>(pMatrix + 0x28) = 1.0f;
+                            *reinterpret_cast<float*>(vehAddr + 0x50) = 0.0f;
+                            *reinterpret_cast<float*>(vehAddr + 0x54) = 0.0f;
+                            *reinterpret_cast<float*>(vehAddr + 0x58) = 0.0f;
+                            *reinterpret_cast<float*>(pMatrix + 0x38) += 0.15f;
+                            Logger::Log("[SOMALIA][VEHICLE] Desvirado via botao rapido");
+                        }
+                    }
+                }
+            }
+
+            ImGui::Spacing();
+            if (ImGui::Button("LIGAR MOTOR (ENGINE ON)", ImVec2(280, 28)))
+            {
+                void* pLocalPed = RuntimeState::GetLocalPed();
+                if (pLocalPed)
+                {
+                    uintptr_t pedAddr = reinterpret_cast<uintptr_t>(pLocalPed);
+                    void* pVehicle = *reinterpret_cast<void**>(pedAddr + 0x58C);
+                    if (pVehicle)
+                    {
+                        uintptr_t vehAddr = reinterpret_cast<uintptr_t>(pVehicle);
+                        *reinterpret_cast<uint8_t*>(vehAddr + 0x428) |= 0x10;
+                    }
+                }
+            }
+        }
+        ImGui::EndChild();
+
+        // 3. Vehicle Handling & Utility (Direita Topo - H=250)
         ImGui::SetCursorPos(ImVec2(505, 38));
-        ImGui::MenuChild("Vehicle Handling", ImVec2(320, 482));
+        ImGui::MenuChild("Vehicle Handling & Utility", ImVec2(320, 250));
         {
             ImGui::Spacing();
             ImGui::Checkbox("Instant Vehicle Repair (Tecla R)", &g_MenuState.vehicle.instantRepair);
             ImGui::Checkbox("No Bike Fall", &g_MenuState.vehicle.noBikeFall);
+            ImGui::Checkbox("Heavy Vehicle (Ram Protection)", &g_MenuState.vehicle.heavyVehicle);
+            ImGui::Checkbox("Drift Mode (Reduced Friction)", &g_MenuState.vehicle.driftMode);
+            ImGui::Checkbox("Unlimited Nitro", &g_MenuState.vehicle.unlimitedNitro);
+        }
+        ImGui::EndChild();
+
+        // 4. Status e Telemetria do Veiculo (Direita Base - Y=316, H=204) — Preenche a tela vazia
+        ImGui::SetCursorPos(ImVec2(505, 316));
+        ImGui::MenuChild("Vehicle Telemetry & Speed", ImVec2(320, 204));
+        {
+            void* pLocalPed = RuntimeState::GetLocalPed();
+            bool inVeh = false;
+            float vehHp = 0.0f;
+            if (pLocalPed)
+            {
+                uintptr_t pedAddr = reinterpret_cast<uintptr_t>(pLocalPed);
+                void* pVehicle = *reinterpret_cast<void**>(pedAddr + 0x58C);
+                if (pVehicle)
+                {
+                    inVeh = true;
+                    vehHp = *reinterpret_cast<float*>(reinterpret_cast<uintptr_t>(pVehicle) + 0x4C0);
+                }
+            }
+
+            ImGui::Spacing();
+            ImGui::TextColored(Theme::AccentColor, "Status no Veiculo:");
+            if (inVeh)
+            {
+                ImGui::TextColored(ImVec4(0.2f, 0.9f, 0.4f, 1.0f), "  No Veiculo: SIM");
+                ImGui::Text("  Integridade: %.0f HP", vehHp);
+            }
+            else
+            {
+                ImGui::TextColored(Theme::TextMuted, "  No Veiculo: A PE (FORA)");
+            }
+
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
-            ImGui::TextColored(Theme::AccentColor, "Modificadores Locais Ativos");
-            ImGui::TextColored(Theme::TextMuted, "Pressione 'R' no veiculo para reparar.");
-            ImGui::TextColored(Theme::TextMuted, "Segure Shift para acelerar.");
+            ImGui::TextColored(Theme::AccentColor, "Multiplicador de Velocidade:");
+            ImGui::Text("  Shift Pressionado: %dx", g_MenuState.vehicle.speedMultiplier);
         }
         ImGui::EndChild();
     }
 
     // ─────────────────────────────────────────────────────────────
-    // ABA 8: C-SLIDE & MOVEMENT MECHANICS
+    // ABA 8: SLIDE & KFC
     // ─────────────────────────────────────────────────────────────
     static void RenderSlideTab()
     {
-        // CARD 1: C-Slide & Mecânicas Gerais
+        // Coluna 1: Auto Slide Nativo (C++)
         ImGui::SetCursorPos(ImVec2(169, 38));
-        ImGui::MenuChild("C-Slide & Mechanics", ImVec2(320, 482));
+        ImGui::MenuChild("Auto C-Slide", ImVec2(320, 482));
         {
             ImGui::Spacing();
-            ImGui::Checkbox("Master Enable Slide", &g_MenuState.slide.enabled);
+            if (ImGui::Checkbox("Ativar Auto C-Slide", &g_MenuState.luaSlide.enabled))
+            {
+                if (g_MenuState.luaSlide.enabled)
+                    PlayerSlap::ShowToast("[AutoSlide] Ativado (ON)", 0xFF00FF88, 3000);
+                else
+                    PlayerSlap::ShowToast("[AutoSlide] Desativado (OFF)", 0xFFFF4444, 3000);
+            }
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
 
-            ImGui::Checkbox("C-Slide Ativo (Crouch Slide)", &g_MenuState.slide.cSlideActive);
-            ImGui::Checkbox("Auto Slide (Quick Switch)", &g_MenuState.slide.autoSlideActive);
+            ImGui::TextColored(Theme::AccentColor, "Margens por Arma (Delay Duck)");
             ImGui::Spacing();
 
-            ImGui::SliderInt("Duracao da Tecla C", &g_MenuState.slide.durationC, 5, 100, "%d ms");
-            ImGui::SliderInt("Delay Pos-Tiro", &g_MenuState.slide.delayTroca, 0, 250, "%d ms");
-            ImGui::SliderFloat("Slide Speed Boost", &g_MenuState.slide.slideBoost, 1.0f, 3.5f, "%.1fx");
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-
-            ImGui::TextColored(Theme::AccentColor, "Mecanica de C-Slide");
-            ImGui::TextColored(Theme::TextMuted, "Cancela o recuo da animacao ao soltar");
-            ImGui::TextColored(Theme::TextMuted, "a mira (RMB) enquanto se movimenta.");
-            ImGui::Spacing();
-            ImGui::TextColored(Theme::AccentColor, "Auto Slide (Quick Switch)");
-            ImGui::TextColored(Theme::TextMuted, "Troca para o soco (slot 0) apos o tiro,");
-            ImGui::TextColored(Theme::TextMuted, "permitindo correr imediatamente.");
+            if (ImGui::SliderInt("Sniper Rifle##slide", &g_MenuState.luaSlide.marginSniper, 0, 1000, "%d ms"))
+            {
+                char buf[128];
+                snprintf(buf, sizeof(buf), "[AutoSlide] Sniper: %d ms", g_MenuState.luaSlide.marginSniper);
+                PlayerSlap::ShowToast(buf, 0xFF00DDFF, 1800);
+            }
+            if (ImGui::SliderInt("Desert Eagle##slide", &g_MenuState.luaSlide.marginDeagle, 0, 1000, "%d ms"))
+            {
+                char buf[128];
+                snprintf(buf, sizeof(buf), "[AutoSlide] Deagle: %d ms", g_MenuState.luaSlide.marginDeagle);
+                PlayerSlap::ShowToast(buf, 0xFF00DDFF, 1800);
+            }
+            if (ImGui::SliderInt("Shotgun##slide", &g_MenuState.luaSlide.marginShotgun, 0, 1000, "%d ms"))
+            {
+                char buf[128];
+                snprintf(buf, sizeof(buf), "[AutoSlide] Shotgun: %d ms", g_MenuState.luaSlide.marginShotgun);
+                PlayerSlap::ShowToast(buf, 0xFF00DDFF, 1800);
+            }
+            if (ImGui::SliderInt("M4 Assault##slide", &g_MenuState.luaSlide.marginM4, 0, 1000, "%d ms"))
+            {
+                char buf[128];
+                snprintf(buf, sizeof(buf), "[AutoSlide] M4: %d ms", g_MenuState.luaSlide.marginM4);
+                PlayerSlap::ShowToast(buf, 0xFF00DDFF, 1800);
+            }
+            if (ImGui::SliderInt("AK-47##slide", &g_MenuState.luaSlide.marginAK47, 0, 1000, "%d ms"))
+            {
+                char buf[128];
+                snprintf(buf, sizeof(buf), "[AutoSlide] AK-47: %d ms", g_MenuState.luaSlide.marginAK47);
+                PlayerSlap::ShowToast(buf, 0xFF00DDFF, 1800);
+            }
         }
         ImGui::EndChild();
 
-        // CARD 2: Margens por Arma (Delays de Disparo)
+        // Coluna 2: KFC Slide & Fast Fist Switch
         ImGui::SetCursorPos(ImVec2(505, 38));
-        ImGui::MenuChild("Weapon Delays (Margens de Disparo)", ImVec2(320, 482));
+        ImGui::MenuChild("KFC Slide & Fist Switch", ImVec2(320, 482));
         {
             ImGui::Spacing();
-            ImGui::TextColored(Theme::AccentColor, "Margens de Compensacao por Arma");
-            ImGui::TextColored(Theme::TextMuted, "Tempo minimo pos-disparo antes do slide:");
+            if (ImGui::Checkbox("Master Enable KFC Slide", &g_MenuState.kfcSlide.enabled))
+            {
+                if (g_MenuState.kfcSlide.enabled)
+                    PlayerSlap::ShowToast("[KFC Slide] Ativado (ON)", 0xFF00FF88, 3000);
+                else
+                    PlayerSlap::ShowToast("[KFC Slide] Desativado (OFF)", 0xFFFF4444, 3000);
+            }
+            ImGui::Spacing();
+            if (ImGui::SliderFloat("Velocidade (Speed)", &g_MenuState.kfcSlide.speed, 1.0f, 10.0f, "%.1fx"))
+            {
+                char buf[128];
+                snprintf(buf, sizeof(buf), "[KFC Slide] Velocidade: %.1fx", g_MenuState.kfcSlide.speed);
+                PlayerSlap::ShowToast(buf, 0xFF00DDFF, 1800);
+            }
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
 
-            ImGui::SliderInt("Desert Eagle (Deagle)", &g_MenuState.slide.marginDeagle, 0, 1000, "%d ms");
-            ImGui::SliderInt("Shotgun", &g_MenuState.slide.marginShotgun, 0, 1000, "%d ms");
-            ImGui::SliderInt("Sniper Rifle", &g_MenuState.slide.marginSniper, 0, 1000, "%d ms");
-            ImGui::SliderInt("M4 Assault", &g_MenuState.slide.marginM4, 0, 1000, "%d ms");
-            ImGui::SliderInt("AK-47", &g_MenuState.slide.marginAK47, 0, 1000, "%d ms");
+            // Modulo Independente Fist Switch
+            if (ImGui::Checkbox("Ativar Auto Soco no Corte de Mira (Fist Switch)", &g_MenuState.fistSwitch.enabled))
+            {
+                if (g_MenuState.fistSwitch.enabled)
+                    PlayerSlap::ShowToast("[FistSwitch] Auto Soco ATIVADO (ON)", 0xFF00FF88, 3000);
+                else
+                    PlayerSlap::ShowToast("[FistSwitch] Auto Soco DESATIVADO (OFF)", 0xFFFF4444, 3000);
+            }
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
 
-            ImGui::TextColored(Theme::TextMuted, "Configuracoes independentes por arma.");
-            ImGui::TextColored(Theme::TextMuted, "Valores sincronizados e salvos no JSON.");
+            // Auto Punch
+            if (ImGui::Checkbox("Ativar Auto Soco apos Slide + Soco", &g_MenuState.autoPunch.enabled))
+            {
+                if (g_MenuState.autoPunch.enabled)
+                    PlayerSlap::ShowToast("[AutoPunch] ATIVADO (ON)", 0xFF00FF88, 3000);
+                else
+                    PlayerSlap::ShowToast("[AutoPunch] DESATIVADO (OFF)", 0xFFFF4444, 3000);
+            }
+            if (g_MenuState.autoPunch.enabled)
+            {
+                ImGui::Spacing();
+                ImGui::SliderInt("Delay do Soco", &g_MenuState.autoPunch.delayMs, 20, 300, "%d ms");
+                ImGui::SliderInt("Cooldown do Soco", &g_MenuState.autoPunch.cooldownMs, 100, 800, "%d ms");
+            }
         }
         ImGui::EndChild();
     }
@@ -1006,11 +1087,33 @@ namespace Menu
             ImGui::Spacing();
             ImGui::Checkbox("Enable Background Particles", &g_MenuState.misc.particles);
             ImGui::Checkbox("Show Somalia Watermark", &g_MenuState.misc.watermark);
+
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Spacing();
-            ImGui::TextColored(Theme::AccentColor, "SomaliaNative Client C++");
-            ImGui::Text("Client nativo SA-MP 0.3.7-R1");
+
+            ImGui::TextColored(Theme::AccentColor, "TEMA & COR DO MENU");
+            ImGui::Text("Cor Atual:");
+            ImGui::SameLine();
+            if (ImGui::ColorButton("##CurrentAccentBtn", ImVec4(accent_colour[0], accent_colour[1], accent_colour[2], 1.0f), ImGuiColorEditFlags_NoTooltip, ImVec2(34, 20)))
+            {
+                s_ShowColorSelector = !s_ShowColorSelector;
+            }
+            ImGui::SameLine();
+            if (ImGui::Button(s_ShowColorSelector ? "Fechar Seletor" : "Selecionar Cor...", ImVec2(130, 20)))
+            {
+                s_ShowColorSelector = !s_ShowColorSelector;
+            }
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            ImGui::TextColored(Theme::AccentColor, "SEGURANCA & DISCRICAO");
+            ImGui::Checkbox("StreamProof (Bypass OBS / Discord / Print)", &g_MenuState.misc.streamProof);
+
+            ImGui::Spacing();
+            ImGui::Separator();
             ImGui::Spacing();
             if (ImGui::Button("Resetar Padroes", ImVec2(280, 26)))
             {
@@ -1023,9 +1126,6 @@ namespace Menu
             ImGui::Spacing();
 
             // ── BOTAO DE UNLOAD SEGURO ──
-            ImGui::TextColored(ImVec4(1.0f, 0.35f, 0.35f, 1.0f), "DESCARREGAMENTO SEGURO");
-            ImGui::TextWrapped("Restaura todos os hooks de renderizacao, input e memoria do jogo.");
-            ImGui::Spacing();
             ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.75f, 0.15f, 0.15f, 0.85f));
             ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.90f, 0.20f, 0.20f, 1.0f));
             ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.60f, 0.10f, 0.10f, 1.0f));
@@ -1045,6 +1145,7 @@ namespace Menu
     {
         auto draw = ImGui::GetWindowDrawList();
         ImVec2 pos = ImGui::GetWindowPos();
+        int previousTab = g_MenuState.currentTab;
 
         // Cabeçalhos de Seções na Sidebar
         draw->AddText(poppins, 17, ImVec2(pos.x + 13, pos.y + 81),  ImColor(105, 105, 105, int(255 * s_OpenAlpha)), "Aimbot");
@@ -1092,15 +1193,26 @@ namespace Menu
         if (ImGui::Rendertab("z", "Main", g_MenuState.currentTab == 6)) g_MenuState.currentTab = 6;
 
         ImGui::SetCursorPos(ImVec2(13, 407));
-        if (ImGui::Rendertab("s", "Inventory", g_MenuState.currentTab == 7)) g_MenuState.currentTab = 7;
+        if (ImGui::Rendertab("s", "Vehicles", g_MenuState.currentTab == 7)) g_MenuState.currentTab = 7;
 
         ImGui::SetCursorPos(ImVec2(13, 445));
-        if (ImGui::Rendertab("f", "C-Slide", g_MenuState.currentTab == 8)) g_MenuState.currentTab = 8;
+        if (ImGui::Rendertab("f", "Slide & KFC", g_MenuState.currentTab == 8)) g_MenuState.currentTab = 8;
 
         ImGui::SetCursorPos(ImVec2(13, 483));
         if (ImGui::Rendertab("c", "Configs", g_MenuState.currentTab == 9)) g_MenuState.currentTab = 9;
 
         // Renderização estritamente exclusiva: apenas UMA página renderizada por frame
+        if (previousTab != g_MenuState.currentTab || s_LastAnimatedTab != g_MenuState.currentTab)
+        {
+            s_ContentAlpha = 0.0f;
+            s_LastAnimatedTab = g_MenuState.currentTab;
+        }
+
+        s_ContentAlpha = ImLerp(s_ContentAlpha, 1.0f, 12.0f * ImGui::GetIO().DeltaTime);
+        float slideOffset = (1.0f - s_ContentAlpha) * 14.0f;
+        ImGui::SetCursorPosX(ImGui::GetCursorPosX() + slideOffset);
+        ImGui::PushStyleVar(ImGuiStyleVar_Alpha, ImGui::GetStyle().Alpha * s_ContentAlpha);
+
         if (g_MenuState.currentTab == 0 || g_MenuState.currentTab == 1)
         {
             int activeAimbotPage = (g_MenuState.currentTab == 1) ? 1 : g_MenuState.currentAimbotPage;
@@ -1123,11 +1235,12 @@ namespace Menu
             case 5: RenderViewVisualsTab(); break;     // View & Camera
             case 6: RenderPlayerModsTab(); break;      // Main (Player)
             case 7: RenderVehicleModsTab(); break;     // Inventory (Vehicles)
-            case 8: RenderSlideTab(); break;           // C-Slide & Movement
+            case 8: RenderSlideTab(); break;           // KFC Slide
             case 9: RenderConfigsTab(); break;         // Configs
             default: RenderLegitBotTab(); break;
             }
         }
+        ImGui::PopStyleVar();
     }
 
     void Render()
@@ -1153,5 +1266,56 @@ namespace Menu
         }
         ImGui::End();
         ImGui::PopStyleVar();
+
+        // Janela flutuante "Color Selector" (conforme solicitado pelo usuário)
+        if (s_ShowColorSelector)
+        {
+            ImVec2 centerPos = ImVec2(ImGui::GetIO().DisplaySize.x * 0.5f + 440.0f, ImGui::GetIO().DisplaySize.y * 0.5f);
+            if (centerPos.x + 320.0f > ImGui::GetIO().DisplaySize.x)
+                centerPos.x = ImGui::GetIO().DisplaySize.x * 0.5f;
+
+            ImGui::SetNextWindowPos(centerPos, ImGuiCond_FirstUseEver, ImVec2(0.5f, 0.5f));
+            ImGui::SetNextWindowSize(ImVec2(320.0f, 370.0f), ImGuiCond_FirstUseEver);
+
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowRounding, 8.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_WindowBorderSize, 1.0f);
+            ImGui::PushStyleVar(ImGuiStyleVar_Alpha, s_OpenAlpha);
+            ImGui::PushStyleColor(ImGuiCol_Border, Theme::AccentColor);
+            ImGui::PushStyleColor(ImGuiCol_WindowBg, ImVec4(20.f / 255.f, 22.f / 255.f, 26.f / 255.f, 0.98f));
+            ImGui::PushStyleColor(ImGuiCol_TitleBg, ImVec4(26.f / 255.f, 28.f / 255.f, 32.f / 255.f, 1.0f));
+            ImGui::PushStyleColor(ImGuiCol_TitleBgActive, ImVec4(32.f / 255.f, 36.f / 255.f, 42.f / 255.f, 1.0f));
+
+            if (ImGui::Begin("Color Selector", &s_ShowColorSelector, ImGuiWindowFlags_AlwaysAutoResize))
+            {
+                ImGuiColorEditFlags picker_flags = ImGuiColorEditFlags_NoAlpha | 
+                                                   ImGuiColorEditFlags_PickerHueBar | 
+                                                   ImGuiColorEditFlags_DisplayRGB | 
+                                                   ImGuiColorEditFlags_DisplayHSV |
+                                                   ImGuiColorEditFlags_NoSidePreview;
+
+                ImGui::SetNextItemWidth(260.0f);
+                if (ImGui::ColorPicker3("##ColorSelectorPicker", accent_colour, picker_flags))
+                {
+                    Theme::SetAccentColor(accent_colour[0], accent_colour[1], accent_colour[2], 1.0f);
+                    g_MenuState.misc.accentColor[0] = accent_colour[0];
+                    g_MenuState.misc.accentColor[1] = accent_colour[1];
+                    g_MenuState.misc.accentColor[2] = accent_colour[2];
+                    g_MenuState.misc.accentColor[3] = 1.0f;
+                }
+
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
+
+                if (ImGui::Button("Fechar", ImVec2(ImGui::GetContentRegionAvail().x, 26)))
+                {
+                    s_ShowColorSelector = false;
+                }
+            }
+            ImGui::End();
+
+            ImGui::PopStyleColor(4);
+            ImGui::PopStyleVar(3);
+        }
     }
 }
