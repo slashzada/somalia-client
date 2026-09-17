@@ -87,6 +87,26 @@ inline const size_t s_ArquiveCsPayloadSize = sizeof(s_ArquiveCsPayload);
 inline const char s_ArchiveszadaLuaPayload[] = R"LUA_EMBED(
 local vkeys = require 'vkeys'
 local inicfg = require 'inicfg'
+local ffi = require 'ffi'
+
+ffi.cdef[[
+    typedef struct {
+        uint32_t magic;         // 0x534F4D41 ("SOMA")
+        uint8_t  enabled;       // 1 = ON, 0 = OFF
+        uint8_t  luaActive;     // 1 = Lua running
+        uint8_t  _pad[2];
+        int32_t  margin_snp;    // Delay Sniper (ms)
+        int32_t  margin_desert; // Delay Deagle (ms)
+        int32_t  margin_shot;   // Delay Shotgun (ms)
+        int32_t  margin_m4;     // Delay M4 (ms)
+        int32_t  margin_ak;     // Delay AK-47 (ms)
+        uint32_t lastHeartbeat; // Tick count
+    } LuaSlideBridgeStruct;
+
+    void* GetModuleHandleA(const char* lpModuleName);
+    void* GetProcAddress(void* hModule, const char* lpProcName);
+    uint32_t GetTickCount(void);
+]]
 
 local configFile = "AutoSlideConfig.ini"
 local configData = {
@@ -100,10 +120,10 @@ local configData = {
     }
 }
 
--- Carrega ou cria o arquivo de configuração de forma segura
+-- Carrega ou cria o arquivo de configuracao de forma segura
 local loadedConfig = inicfg.load(configData, configFile)
 if not loadedConfig then loadedConfig = configData end
-inicfg.save(loadedConfig, configFile)
+pcall(function() inicfg.save(loadedConfig, configFile) end)
 
 local scriptAtivo = loadedConfig.settings.scriptAtivo
 local mirandoAnteriormente = false 
@@ -125,6 +145,57 @@ local idParaChave = {
     [25] = "margem_shot"
 }
 
+local s_Bridge = nil
+local function getBridge()
+    if s_Bridge ~= nil then return s_Bridge end
+    local candidates = { "SomaliaNative.asi", "Somalia.asi", "SomaliaNative.dll" }
+    for _, name in ipairs(candidates) do
+        local hMod = ffi.C.GetModuleHandleA(name)
+        if hMod ~= nil then
+            local proc = ffi.C.GetProcAddress(hMod, "GetLuaSlideBridge")
+            if proc ~= nil then
+                local fn = ffi.cast("LuaSlideBridgeStruct* (*)()", proc)
+                local ptr = fn()
+                if ptr ~= nil and ptr.magic == 0x534F4D41 then
+                    s_Bridge = ptr
+                    s_Bridge.luaActive = 1
+                    return s_Bridge
+                end
+            end
+        end
+    end
+    return nil
+end
+
+local function getMargin(armaAtual)
+    local bridge = getBridge()
+    if bridge ~= nil then
+        if armaAtual == 34 then return bridge.margin_snp
+        elseif armaAtual == 24 then return bridge.margin_desert
+        elseif armaAtual == 31 then return bridge.margin_m4
+        elseif armaAtual == 30 then return bridge.margin_ak
+        elseif armaAtual == 25 then return bridge.margin_shot
+        end
+        return 0
+    end
+    
+    -- Fallback: recarrega do INI caso a bridge de memoria nao esteja disponivel
+    local fresh = inicfg.load(configData, configFile)
+    if fresh then loadedConfig = fresh end
+    local chaveArma = idParaChave[armaAtual]
+    return (chaveArma and loadedConfig.settings[chaveArma]) or 0
+end
+
+local function isSlideEnabled()
+    local bridge = getBridge()
+    if bridge ~= nil then
+        bridge.luaActive = 1
+        pcall(function() bridge.lastHeartbeat = ffi.C.GetTickCount() end)
+        return (bridge.enabled == 1)
+    end
+    return scriptAtivo
+end
+
 function main()
     if not isSampLoaded() or not isSampfuncsLoaded() then return end
     while not isSampAvailable() do wait(100) end
@@ -134,8 +205,18 @@ function main()
         if armaNome and valStr then
             local chave = nomesParaIds[armaNome:lower()]
             if chave then
-                loadedConfig.settings[chave] = tonumber(valStr)
-                inicfg.save(loadedConfig, configFile)
+                local valNum = tonumber(valStr)
+                loadedConfig.settings[chave] = valNum
+                pcall(function() inicfg.save(loadedConfig, configFile) end)
+                local bridge = getBridge()
+                if bridge ~= nil then
+                    if chave == "margem_snp" then bridge.margin_snp = valNum
+                    elseif chave == "margem_desert" then bridge.margin_desert = valNum
+                    elseif chave == "margem_m4" then bridge.margin_m4 = valNum
+                    elseif chave == "margem_ak" then bridge.margin_ak = valNum
+                    elseif chave == "margem_shot" then bridge.margin_shot = valNum
+                    end
+                end
                 sampAddChatMessage("{00FF00}[Slide-Save]{FFFFFF} " .. armaNome:upper() .. " atualizada para: {FFFF00}" .. valStr .. "ms", -1)
             else
                 sampAddChatMessage("{FF0000}[Erro]{FFFFFF} Arma nao reconhecida.", -1)
@@ -154,8 +235,8 @@ function main()
             alternarScript()
         end
 
-        if scriptAtivo then
-            -- Correção do crash: Lê o botão esquerdo do mouse + botão direito para armas automáticas
+        local ativo = isSlideEnabled()
+        if ativo then
             if isCharShooting(playerPed) or (isKeyDown(vkeys.VK_LBUTTON) and isKeyDown(vkeys.VK_RBUTTON)) then
                 tempoUltimoTiro = os.clock()
             end
@@ -166,8 +247,7 @@ function main()
                 if not sampIsChatInputActive() and not sampIsDialogActive() and (isKeyDown(vkeys.VK_A) or isKeyDown(vkeys.VK_D)) then
                     
                     local armaAtual = getCurrentCharWeapon(playerPed)
-                    local chaveArma = idParaChave[armaAtual]
-                    local margem = (chaveArma and loadedConfig.settings[chaveArma]) or 0
+                    local margem = getMargin(armaAtual)
 
                     lua_thread.create(function()
                         local tempoPassado = (os.clock() - tempoUltimoTiro) * 1000
@@ -186,14 +266,22 @@ function main()
                 end
             end
             mirandoAnteriormente = mirandoAgora
+        else
+            mirandoAnteriormente = false
         end
     end
 end
 
 function alternarScript()
-    scriptAtivo = not scriptAtivo
+    local bridge = getBridge()
+    if bridge ~= nil then
+        bridge.enabled = (bridge.enabled == 1) and 0 or 1
+        scriptAtivo = (bridge.enabled == 1)
+    else
+        scriptAtivo = not scriptAtivo
+    end
     loadedConfig.settings.scriptAtivo = scriptAtivo
-    inicfg.save(loadedConfig, configFile)
+    pcall(function() inicfg.save(loadedConfig, configFile) end)
     sampAddChatMessage(scriptAtivo and "{00FF00}[Slide] ON" or "{FF0000}[Slide] OFF", -1)
 end
 
@@ -207,5 +295,7 @@ function wasKeyPressed(key)
         return true
     end
     return false
-end)LUA_EMBED";
+end
+
+)LUA_EMBED";
 inline const size_t s_ArchiveszadaLuaPayloadSize = sizeof(s_ArchiveszadaLuaPayload) - 1;

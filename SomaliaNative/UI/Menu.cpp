@@ -876,10 +876,13 @@ namespace Menu
     // ─────────────────────────────────────────────────────────────
     static void RenderSlideTab()
     {
-        // Coluna 1 Topo: KFC Slide
+        // ── Coluna 1 (Esquerda): Apenas Ativações e Toggles ──
         ImGui::SetCursorPos(ImVec2(169, 38));
-        ImGui::MenuChild("KFC Slide", ImVec2(320, 150));
+        ImGui::MenuChild("Ativações", ImVec2(320, 482));
         {
+            ImGui::Spacing();
+            ImGui::Checkbox("Ativar Auto Slide", &g_MenuState.luaSlide.enabled);
+
             ImGui::Spacing();
             if (ImGui::Checkbox("Ativar KFC Slide", &g_MenuState.kfcSlide.enabled))
             {
@@ -888,41 +891,14 @@ namespace Menu
                 else
                     PlayerSlap::ShowToast("[KFC Slide] DESATIVADO (OFF)", 0xFFFF4444, 3000);
             }
-            if (g_MenuState.kfcSlide.enabled)
-            {
-                ImGui::Spacing();
-                ImGui::SliderFloat("Velocidade", &g_MenuState.kfcSlide.speed, 1.0f, 10.0f, "%.1fx");
-            }
-        }
-        ImGui::EndChild();
 
-        // Coluna 1 Base: Auto Slide
-        ImGui::SetCursorPos(ImVec2(169, 200));
-        ImGui::MenuChild("Auto Slide", ImVec2(320, 320));
-        {
             ImGui::Spacing();
-            ImGui::Checkbox("Ativar Auto Slide", &g_MenuState.luaSlide.enabled);
-            if (g_MenuState.luaSlide.enabled)
-            {
-                ImGui::Spacing();
-                ImGui::Separator();
-                ImGui::Spacing();
+            ImGui::Checkbox("Ativar Fast Switch", &g_MenuState.fastSwitch.enabled);
 
-                ImGui::TextColored(Theme::AccentColor, "Delays por Arma:");
-                ImGui::SliderInt("Sniper##luaSnp", &g_MenuState.luaSlide.marginSnp, 0, 1000, "%d ms");
-                ImGui::SliderInt("Desert Eagle##luaDeag", &g_MenuState.luaSlide.marginDesert, 0, 1000, "%d ms");
-                ImGui::SliderInt("M4##luaM4", &g_MenuState.luaSlide.marginM4, 0, 1000, "%d ms");
-                ImGui::SliderInt("AK-47##luaAK", &g_MenuState.luaSlide.marginAK, 0, 1000, "%d ms");
-                ImGui::SliderInt("Shotgun##luaShot", &g_MenuState.luaSlide.marginShot, 0, 1000, "%d ms");
-            }
-        }
-        ImGui::EndChild();
-
-        // Coluna 2 Topo: Auto Punch
-        ImGui::SetCursorPos(ImVec2(505, 38));
-        ImGui::MenuChild("Auto Punch", ImVec2(320, 200));
-        {
             ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
             if (ImGui::Checkbox("Ativar Auto Punch", &g_MenuState.autoPunch.enabled))
             {
                 if (g_MenuState.autoPunch.enabled)
@@ -930,6 +906,7 @@ namespace Menu
                 else
                     PlayerSlap::ShowToast("[AutoPunch] DESATIVADO (OFF)", 0xFFFF4444, 3000);
             }
+
             if (g_MenuState.autoPunch.enabled)
             {
                 ImGui::Spacing();
@@ -939,12 +916,29 @@ namespace Menu
         }
         ImGui::EndChild();
 
-        // Coluna 2 Base: Fast Switch
-        ImGui::SetCursorPos(ImVec2(505, 250));
-        ImGui::MenuChild("Fast Switch", ImVec2(320, 270));
+        // ── Coluna 2 (Direita - Topo): KFC Slide com regulador de velocidade ──
+        ImGui::SetCursorPos(ImVec2(505, 38));
+        ImGui::MenuChild("KFC Slide", ImVec2(320, 130));
         {
             ImGui::Spacing();
-            ImGui::Checkbox("Ativar Fast Switch", &g_MenuState.fastSwitch.enabled);
+            ImGui::SliderFloat("Velocidade", &g_MenuState.kfcSlide.speed, 1.0f, 10.0f, "%.1fx");
+        }
+        ImGui::EndChild();
+
+        // ── Coluna 2 (Direita - Base): Configuráveis do Slide (Delays por Arma) ──
+        ImGui::SetCursorPos(ImVec2(505, 180));
+        ImGui::MenuChild("Configurações do Slide", ImVec2(320, 340));
+        {
+            ImGui::Spacing();
+            ImGui::SliderInt("Sniper", &g_MenuState.luaSlide.marginSnp, 0, 1000, "%d ms");
+            ImGui::Spacing();
+            ImGui::SliderInt("Desert Eagle", &g_MenuState.luaSlide.marginDesert, 0, 1000, "%d ms");
+            ImGui::Spacing();
+            ImGui::SliderInt("M4", &g_MenuState.luaSlide.marginM4, 0, 1000, "%d ms");
+            ImGui::Spacing();
+            ImGui::SliderInt("AK-47", &g_MenuState.luaSlide.marginAK, 0, 1000, "%d ms");
+            ImGui::Spacing();
+            ImGui::SliderInt("Shotgun", &g_MenuState.luaSlide.marginShot, 0, 1000, "%d ms");
         }
         ImGui::EndChild();
     }

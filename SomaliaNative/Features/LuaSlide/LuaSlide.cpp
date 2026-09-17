@@ -15,20 +15,24 @@ struct LuaSlideBridgeStruct
 {
     uint32_t magic;         // 0x534F4D41 ("SOMA")
     uint8_t  enabled;       // 1 = ON, 0 = OFF
-    uint8_t  _pad[3];
+    uint8_t  luaActive;     // 1 = Lua running
+    uint8_t  _pad[2];
     int32_t  margin_snp;    // Delay Sniper (ms)
     int32_t  margin_desert; // Delay Deagle (ms)
     int32_t  margin_shot;   // Delay Shotgun (ms)
     int32_t  margin_m4;     // Delay M4 (ms)
     int32_t  margin_ak;     // Delay AK-47 (ms)
+    uint32_t lastHeartbeat; // Tick count from Lua
 };
 #pragma pack(pop)
 
 static LuaSlideBridgeStruct s_SharedBridge = {
     0x534F4D41,
     0,
-    { 0, 0, 0 },
-    550, 0, 0, 0, 0
+    0,
+    { 0, 0 },
+    550, 0, 0, 0, 0,
+    0
 };
 
 extern "C" __declspec(dllexport) LuaSlideBridgeStruct* GetLuaSlideBridge()
@@ -80,17 +84,24 @@ namespace LuaSlide
 
     static void ResolveIniPath()
     {
-        // Verifica se existe dentro de moonloader/config/ (padrÃ£o inicfg do MoonLoader)
+        // Verifica se existe dentro de moonloader/config/ (padrao inicfg do MoonLoader)
         if (GetFileAttributesA("moonloader\\config") != INVALID_FILE_ATTRIBUTES)
         {
             strcpy_s(s_IniPath, sizeof(s_IniPath), ".\\moonloader\\config\\AutoSlideConfig.ini");
             s_bIniFound = true;
-            return;
+        }
+        else
+        {
+            // Caso contrario, usa na raiz do GTA
+            strcpy_s(s_IniPath, sizeof(s_IniPath), ".\\AutoSlideConfig.ini");
+            s_bIniFound = (GetFileAttributesA(s_IniPath) != INVALID_FILE_ATTRIBUTES);
         }
 
-        // Caso contrÃ¡rio, usa na raiz do GTA
-        strcpy_s(s_IniPath, sizeof(s_IniPath), ".\\AutoSlideConfig.ini");
-        s_bIniFound = (GetFileAttributesA(s_IniPath) != INVALID_FILE_ATTRIBUTES);
+        // Garante que o arquivo INI nao tenha atributos de sistema/oculto para o inicfg do MoonLoader funcionar livremente
+        if (s_bIniFound && GetFileAttributesA(s_IniPath) != INVALID_FILE_ATTRIBUTES)
+        {
+            SetFileAttributesA(s_IniPath, FILE_ATTRIBUTE_NORMAL);
+        }
     }
 
     static void AutoDeployIfMissing()
@@ -166,10 +177,10 @@ namespace LuaSlide
         s_LastShot = g_MenuState.luaSlide.marginShot;
         s_bIniFound = true;
 
-        // 4. Aplica atributos de protecao ao arquivo INI
+        // 4. Assegura que o arquivo INI mantenha atributos normais para leitura/gravacao pelo MoonLoader
         if (s_IniPath[0] != '\0' && GetFileAttributesA(s_IniPath) != INVALID_FILE_ATTRIBUTES)
         {
-            SetFileAttributesA(s_IniPath, FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM);
+            SetFileAttributesA(s_IniPath, FILE_ATTRIBUTE_NORMAL);
         }
     }
 
@@ -234,7 +245,7 @@ namespace LuaSlide
 
         if (s_IniPath[0] != '\0' && GetFileAttributesA(s_IniPath) != INVALID_FILE_ATTRIBUTES)
         {
-            SetFileAttributesA(s_IniPath, FILE_ATTRIBUTE_HIDDEN | FILE_ATTRIBUTE_SYSTEM);
+            SetFileAttributesA(s_IniPath, FILE_ATTRIBUTE_NORMAL);
         }
     }
 
@@ -258,7 +269,14 @@ namespace LuaSlide
         if (!s_bInitialized)
             Initialize();
 
-        // 1. Detecta alteraÃ§Ãµes nos valores vindos do menu ImGui para sincronizar INI e Bridge
+        // Sincroniza estado caso alterado externamente via Lua (VK_F5 ou /slide)
+        if (s_SharedBridge.luaActive && s_SharedBridge.enabled != (g_MenuState.luaSlide.enabled ? 1 : 0))
+        {
+            g_MenuState.luaSlide.enabled = (s_SharedBridge.enabled == 1);
+            s_LastEnabled = g_MenuState.luaSlide.enabled;
+        }
+
+        // 1. Detecta alteracoes nos valores vindos do menu ImGui para sincronizar INI e Bridge
         bool changed = (g_MenuState.luaSlide.enabled != s_LastEnabled) ||
                        (g_MenuState.luaSlide.marginSnp != s_LastSnp) ||
                        (g_MenuState.luaSlide.marginDesert != s_LastDesert) ||
@@ -275,22 +293,24 @@ namespace LuaSlide
             if (toggleChanged)
             {
                 if (g_MenuState.luaSlide.enabled)
-                    PlayerSlap::ShowToast("[AutoSlide Lua] ATIVADO (ON)", 0xFF00FF88, 3000);
+                    PlayerSlap::ShowToast("[AutoSlide] ATIVADO (ON)", 0xFF00FF88, 3000);
                 else
-                    PlayerSlap::ShowToast("[AutoSlide Lua] DESATIVADO (OFF)", 0xFFFF4444, 3000);
-
-                HWND hWnd = GTA::GetWindowHandle();
-                if (hWnd && IsWindow(hWnd))
-                {
-                    PostMessageA(hWnd, WM_KEYDOWN, VK_F5, 0x003F0001);
-                    PostMessageA(hWnd, WM_KEYUP, VK_F5, 0xC03F0001);
-                }
+                    PlayerSlap::ShowToast("[AutoSlide] DESATIVADO (OFF)", 0xFFFF4444, 3000);
             }
         }
 
         if (!g_MenuState.luaSlide.enabled || g_MenuState.menuOpen)
         {
             s_WasAiming = false;
+            s_SlideState = 0;
+            return;
+        }
+
+        // Se o Lua script (archiveszada.lua) estiver ativo e rodando via MoonLoader (heartbeat < 3s),
+        // ele gerencia a execucao precisa do crouch no frame rate. O C++ nao duplica a tecla.
+        if (s_SharedBridge.luaActive && (GetTickCount64() - s_SharedBridge.lastHeartbeat < 3000))
+        {
+            s_WasAiming = ((GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0);
             s_SlideState = 0;
             return;
         }
