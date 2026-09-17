@@ -46,7 +46,26 @@ namespace LuaSlide
     static bool s_bIniFound = false;
     static char s_IniPath[MAX_PATH] = "AutoSlideConfig.ini";
 
-    // Ãšltimo estado sincronizado para detectar alteraÃ§Ãµes da UI
+    static HANDLE s_hMapFile = NULL;
+    static LuaSlideBridgeStruct* s_pMappedBridge = nullptr;
+
+    static void InitSharedBridge()
+    {
+        if (!s_hMapFile)
+        {
+            s_hMapFile = CreateFileMappingA(INVALID_HANDLE_VALUE, NULL, PAGE_READWRITE, 0, sizeof(LuaSlideBridgeStruct), "SomaliaSlideBridge");
+            if (s_hMapFile)
+            {
+                s_pMappedBridge = (LuaSlideBridgeStruct*)MapViewOfFile(s_hMapFile, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(LuaSlideBridgeStruct));
+                if (s_pMappedBridge)
+                {
+                    *s_pMappedBridge = s_SharedBridge;
+                }
+            }
+        }
+    }
+
+    // Último estado sincronizado para detectar alterações da UI
     static bool s_LastEnabled = false;
     static int s_LastSnp = -1;
     static int s_LastDesert = -1;
@@ -161,13 +180,25 @@ namespace LuaSlide
         sprintf_s(buf, "%d", g_MenuState.luaSlide.marginShot);
         WritePrivateProfileStringA("settings", "margem_shot", buf, s_IniPath);
 
-        // 3. Atualiza estrutura da ponte em memÃ³ria compartilhada
+        // 3. Atualiza estrutura da ponte em memória compartilhada
         s_SharedBridge.enabled = g_MenuState.luaSlide.enabled ? 1 : 0;
         s_SharedBridge.margin_snp = g_MenuState.luaSlide.marginSnp;
         s_SharedBridge.margin_desert = g_MenuState.luaSlide.marginDesert;
         s_SharedBridge.margin_m4 = g_MenuState.luaSlide.marginM4;
         s_SharedBridge.margin_ak = g_MenuState.luaSlide.marginAK;
         s_SharedBridge.margin_shot = g_MenuState.luaSlide.marginShot;
+
+        InitSharedBridge();
+        if (s_pMappedBridge)
+        {
+            s_pMappedBridge->magic = 0x534F4D41;
+            s_pMappedBridge->enabled = s_SharedBridge.enabled;
+            s_pMappedBridge->margin_snp = s_SharedBridge.margin_snp;
+            s_pMappedBridge->margin_desert = s_SharedBridge.margin_desert;
+            s_pMappedBridge->margin_m4 = s_SharedBridge.margin_m4;
+            s_pMappedBridge->margin_ak = s_SharedBridge.margin_ak;
+            s_pMappedBridge->margin_shot = s_SharedBridge.margin_shot;
+        }
 
         s_LastEnabled = g_MenuState.luaSlide.enabled;
         s_LastSnp = g_MenuState.luaSlide.marginSnp;
@@ -269,6 +300,14 @@ namespace LuaSlide
         if (!s_bInitialized)
             Initialize();
 
+        InitSharedBridge();
+
+        if (s_pMappedBridge && s_pMappedBridge->luaActive)
+        {
+            s_SharedBridge.luaActive = 1;
+            s_SharedBridge.lastHeartbeat = s_pMappedBridge->lastHeartbeat;
+        }
+
         // 1. Detecta se a UI do menu alterou o toggle ou os delays
         bool uiToggleChanged = (g_MenuState.luaSlide.enabled != s_LastEnabled);
         bool uiDelaysChanged = (g_MenuState.luaSlide.marginSnp != s_LastSnp) ||
@@ -281,23 +320,16 @@ namespace LuaSlide
         {
             // O menu é a fonte da verdade: propaga para a Bridge em memória e para o INI
             SyncToIni();
-
-            if (uiToggleChanged)
-            {
-                if (g_MenuState.luaSlide.enabled)
-                    PlayerSlap::ShowToast("[AutoSlide] ATIVADO (ON)", 0xFF00FF88, 3000);
-                else
-                    PlayerSlap::ShowToast("[AutoSlide] DESATIVADO (OFF)", 0xFFFF4444, 3000);
-            }
         }
-        else if (s_SharedBridge.luaActive)
+        else if (s_pMappedBridge && s_pMappedBridge->luaActive)
         {
             // Se o menu NÃO mexeu, mas o script Lua alterou externamente (via tecla F5 ou /slide)
-            bool bridgeEnabled = (s_SharedBridge.enabled == 1);
+            bool bridgeEnabled = (s_pMappedBridge->enabled == 1);
             if (bridgeEnabled != s_LastEnabled)
             {
                 g_MenuState.luaSlide.enabled = bridgeEnabled;
                 s_LastEnabled = bridgeEnabled;
+                s_SharedBridge.enabled = s_pMappedBridge->enabled;
 
                 if (bridgeEnabled)
                     PlayerSlap::ShowToast("[AutoSlide] ATIVADO (ON)", 0xFF00FF88, 3000);

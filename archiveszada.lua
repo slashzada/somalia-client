@@ -16,6 +16,9 @@ ffi.cdef[[
         uint32_t lastHeartbeat; // Tick count
     } LuaSlideBridgeStruct;
 
+    void* OpenFileMappingA(uint32_t dwDesiredAccess, int bInheritHandle, const char* lpName);
+    void* MapViewOfFile(void* hFileMappingObject, uint32_t dwDesiredAccess, uint32_t dwFileOffsetHigh, uint32_t dwFileOffsetLow, size_t dwNumberOfBytesToMap);
+    int CloseHandle(void* hObject);
     void* GetModuleHandleA(const char* lpModuleName);
     void* GetProcAddress(void* hModule, const char* lpProcName);
     uint32_t GetTickCount(void);
@@ -61,6 +64,23 @@ local idParaChave = {
 local s_Bridge = nil
 local function getBridge()
     if s_Bridge ~= nil then return s_Bridge end
+    
+    -- 1. Named Shared Memory no Windows
+    local FILE_MAP_ALL_ACCESS = 0xF001F
+    local hMap = ffi.C.OpenFileMappingA(FILE_MAP_ALL_ACCESS, 0, "SomaliaSlideBridge")
+    if hMap ~= nil then
+        local pBuf = ffi.C.MapViewOfFile(hMap, FILE_MAP_ALL_ACCESS, 0, 0, ffi.sizeof("LuaSlideBridgeStruct"))
+        if pBuf ~= nil then
+            local ptr = ffi.cast("LuaSlideBridgeStruct*", pBuf)
+            if ptr.magic == 0x534F4D41 then
+                s_Bridge = ptr
+                s_Bridge.luaActive = 1
+                return s_Bridge
+            end
+        end
+    end
+
+    -- 2. Fallback por GetModuleHandle
     local candidates = { "SomaliaNative.asi", "Somalia.asi", "SomaliaNative.dll" }
     for _, name in ipairs(candidates) do
         local hMod = ffi.C.GetModuleHandleA(name)
@@ -94,17 +114,31 @@ local function getMargin(armaAtual)
     
     -- Fallback: recarrega do INI caso a bridge de memoria nao esteja disponivel
     local fresh = inicfg.load(configData, configFile)
-    if fresh then loadedConfig = fresh end
+    if fresh and fresh.settings then loadedConfig = fresh end
     local chaveArma = idParaChave[armaAtual]
     return (chaveArma and loadedConfig.settings[chaveArma]) or 0
 end
 
+local lastIniCheck = 0
 local function isSlideEnabled()
     local bridge = getBridge()
     if bridge ~= nil then
         bridge.luaActive = 1
         pcall(function() bridge.lastHeartbeat = ffi.C.GetTickCount() end)
-        return (bridge.enabled == 1)
+        scriptAtivo = (bridge.enabled == 1)
+        return scriptAtivo
+    end
+
+    -- Fallback: recarrega do INI a cada 100ms se ainda nao conectou na memoria
+    local now = os.clock()
+    if now - lastIniCheck > 0.1 then
+        lastIniCheck = now
+        local fresh = inicfg.load(configData, configFile)
+        if fresh and fresh.settings then
+            loadedConfig = fresh
+            local val = fresh.settings.scriptAtivo
+            scriptAtivo = (val == true or val == "true" or val == 1 or val == "1")
+        end
     end
     return scriptAtivo
 end
