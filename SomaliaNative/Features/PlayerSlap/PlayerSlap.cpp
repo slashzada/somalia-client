@@ -26,6 +26,9 @@ namespace PlayerSlap
 
     void ShowToast(const std::string& msg, uint32_t color, uint32_t durationMs)
     {
+        if (!g_MenuState.misc.notifications)
+            return;
+
         s_Notification.active = true;
         s_Notification.text = msg;
         s_Notification.color = color;
@@ -111,6 +114,12 @@ namespace PlayerSlap
 
     void RenderNotifications()
     {
+        if (!g_MenuState.misc.notifications)
+        {
+            s_Notification.active = false;
+            return;
+        }
+
         if (!s_Notification.active || s_Notification.text.empty())
             return;
 

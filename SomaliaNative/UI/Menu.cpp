@@ -1083,6 +1083,7 @@ namespace Menu
             ImGui::Spacing();
             ImGui::Checkbox("Enable Background Particles", &g_MenuState.misc.particles);
             ImGui::Checkbox("Show Somalia Watermark", &g_MenuState.misc.watermark);
+            ImGui::Checkbox("Notificacoes na Tela (Toasts)", &g_MenuState.misc.notifications);
 
             ImGui::Spacing();
             ImGui::Separator();
@@ -1113,6 +1114,8 @@ namespace Menu
             ImGui::Spacing();
 
             ImGui::TextColored(Theme::AccentColor, "ATALHOS RAPIDOS (KEYBINDS)");
+            ImGui::Checkbox("Exibir Notificacoes na Tela (Toasts)", &g_MenuState.misc.notifications);
+            ImGui::Spacing();
             auto KeybindRow = [](const char* name, const char* id, int* pKey)
             {
                 ImGui::Text("%s", name);

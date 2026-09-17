@@ -301,11 +301,11 @@ namespace Config
         AppendFmt(out, "    \"antiHSKey\": %d,\n", g_MenuState.hotkeys.antiHSKey);
         AppendFmt(out, "    \"godmodeKey\": %d\n", g_MenuState.hotkeys.godmodeKey);
         AppendFmt(out, "  },\n");
-
         // 9. MISC
         AppendFmt(out, "  \"misc\": {\n");
         AppendFmt(out, "    \"particles\": %s,\n", g_MenuState.misc.particles ? "true" : "false");
         AppendFmt(out, "    \"watermark\": %s,\n", g_MenuState.misc.watermark ? "true" : "false");
+        AppendFmt(out, "    \"notifications\": %s,\n", g_MenuState.misc.notifications ? "true" : "false");
         AppendFmt(out, "    \"streamProof\": %s,\n", g_MenuState.misc.streamProof ? "true" : "false");
         AppendFmt(out, "    \"accentR\": %.4f,\n", g_MenuState.misc.accentColor[0]);
         AppendFmt(out, "    \"accentG\": %.4f,\n", g_MenuState.misc.accentColor[1]);
@@ -694,6 +694,7 @@ namespace Config
         {
             tempState.misc.particles = ParseBool(pMisc, "\"particles\"", tempState.misc.particles);
             tempState.misc.watermark = ParseBool(pMisc, "\"watermark\"", tempState.misc.watermark);
+            tempState.misc.notifications = ParseBool(pMisc, "\"notifications\"", tempState.misc.notifications);
             tempState.misc.streamProof = ParseBool(pMisc, "\"streamProof\"", tempState.misc.streamProof);
             tempState.misc.accentColor[0] = ParseFloat(pMisc, "\"accentR\"", tempState.misc.accentColor[0]);
             tempState.misc.accentColor[1] = ParseFloat(pMisc, "\"accentG\"", tempState.misc.accentColor[1]);

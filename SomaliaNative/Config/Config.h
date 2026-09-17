@@ -317,6 +317,7 @@ struct MiscConfig
 {
     bool watermark = true;
     bool particles = true;
+    bool notifications = true; // Notificacoes visuais na tela (Toasts)
     int themeColor = 0;
     char configName[32] = "Default.json";
     bool streamProof = false;
