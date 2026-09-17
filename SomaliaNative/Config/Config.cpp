@@ -34,6 +34,7 @@ namespace Config
         g_MenuState.playerSlap = PlayerSlapConfig();
         g_MenuState.fastSwitch = FastSwitchConfig();
         g_MenuState.luaSlide = LuaSlideConfig();
+        g_MenuState.hotkeys = HotkeysConfig();
         g_MenuState.misc = MiscConfig();
         Theme::SetAccentColor(137.f / 255.f, 207.f / 255.f, 240.f / 255.f, 1.0f);
         Logger::Log("[CONFIG] Configuracoes restauradas para os padroes (Legit e Rage independentes).");
@@ -286,6 +287,19 @@ namespace Config
         AppendFmt(out, "    \"marginM4\": %d,\n", g_MenuState.luaSlide.marginM4);
         AppendFmt(out, "    \"marginAK\": %d,\n", g_MenuState.luaSlide.marginAK);
         AppendFmt(out, "    \"marginShot\": %d\n", g_MenuState.luaSlide.marginShot);
+        AppendFmt(out, "  },\n");
+
+        // 8.9 HOTKEYS (Keybinds)
+        AppendFmt(out, "  \"hotkeys\": {\n");
+        AppendFmt(out, "    \"autoSlideKey\": %d,\n", g_MenuState.hotkeys.autoSlideKey);
+        AppendFmt(out, "    \"kfcSlideKey\": %d,\n", g_MenuState.hotkeys.kfcSlideKey);
+        AppendFmt(out, "    \"fastSwitchKey\": %d,\n", g_MenuState.hotkeys.fastSwitchKey);
+        AppendFmt(out, "    \"autoPunchKey\": %d,\n", g_MenuState.hotkeys.autoPunchKey);
+        AppendFmt(out, "    \"silentAimKey\": %d,\n", g_MenuState.hotkeys.silentAimKey);
+        AppendFmt(out, "    \"legitBotKey\": %d,\n", g_MenuState.hotkeys.legitBotKey);
+        AppendFmt(out, "    \"antiAimKey\": %d,\n", g_MenuState.hotkeys.antiAimKey);
+        AppendFmt(out, "    \"antiHSKey\": %d,\n", g_MenuState.hotkeys.antiHSKey);
+        AppendFmt(out, "    \"godmodeKey\": %d\n", g_MenuState.hotkeys.godmodeKey);
         AppendFmt(out, "  },\n");
 
         // 9. MISC
@@ -657,6 +671,21 @@ namespace Config
             tempState.luaSlide.marginM4 = ParseInt(pLuaSlide, "\"marginM4\"", tempState.luaSlide.marginM4);
             tempState.luaSlide.marginAK = ParseInt(pLuaSlide, "\"marginAK\"", tempState.luaSlide.marginAK);
             tempState.luaSlide.marginShot = ParseInt(pLuaSlide, "\"marginShot\"", tempState.luaSlide.marginShot);
+        }
+
+        // 8.9 Parse Hotkeys
+        const char* pHotkeys = strstr(buffer, "\"hotkeys\"");
+        if (pHotkeys)
+        {
+            tempState.hotkeys.autoSlideKey = ParseInt(pHotkeys, "\"autoSlideKey\"", tempState.hotkeys.autoSlideKey);
+            tempState.hotkeys.kfcSlideKey = ParseInt(pHotkeys, "\"kfcSlideKey\"", tempState.hotkeys.kfcSlideKey);
+            tempState.hotkeys.fastSwitchKey = ParseInt(pHotkeys, "\"fastSwitchKey\"", tempState.hotkeys.fastSwitchKey);
+            tempState.hotkeys.autoPunchKey = ParseInt(pHotkeys, "\"autoPunchKey\"", tempState.hotkeys.autoPunchKey);
+            tempState.hotkeys.silentAimKey = ParseInt(pHotkeys, "\"silentAimKey\"", tempState.hotkeys.silentAimKey);
+            tempState.hotkeys.legitBotKey = ParseInt(pHotkeys, "\"legitBotKey\"", tempState.hotkeys.legitBotKey);
+            tempState.hotkeys.antiAimKey = ParseInt(pHotkeys, "\"antiAimKey\"", tempState.hotkeys.antiAimKey);
+            tempState.hotkeys.antiHSKey = ParseInt(pHotkeys, "\"antiHSKey\"", tempState.hotkeys.antiHSKey);
+            tempState.hotkeys.godmodeKey = ParseInt(pHotkeys, "\"godmodeKey\"", tempState.hotkeys.godmodeKey);
         }
 
         // 9. Parse Misc

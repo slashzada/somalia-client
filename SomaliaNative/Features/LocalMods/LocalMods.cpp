@@ -157,8 +157,13 @@ namespace LocalMods
                     static float s_LastHealth = 100.0f;
                     float curHealth = *pHealth;
 
+                    // Se a vida aumentou (cura, comida, spawn)
+                    if (curHealth > s_LastHealth)
+                    {
+                        s_LastHealth = curHealth;
+                    }
                     // Se houve dano
-                    if (curHealth < s_LastHealth)
+                    else if (curHealth < s_LastHealth)
                     {
                         float lostHp = s_LastHealth - curHealth;
                         uint32_t* pPedState = reinterpret_cast<uint32_t*>(pedAddr + 0x530);

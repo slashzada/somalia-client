@@ -300,6 +300,19 @@ struct LuaSlideConfig
     int marginShot = 0;
 };
 
+struct HotkeysConfig
+{
+    int autoSlideKey = 0;   // VK keycode (0 = none)
+    int kfcSlideKey = 0;
+    int fastSwitchKey = 0;
+    int autoPunchKey = 0;
+    int silentAimKey = 0;
+    int legitBotKey = 0;
+    int antiAimKey = 0;
+    int antiHSKey = 0;
+    int godmodeKey = 0;
+};
+
 struct MiscConfig
 {
     bool watermark = true;
@@ -329,6 +342,7 @@ struct MenuState
     PlayerSlapConfig playerSlap;
     FastSwitchConfig fastSwitch;
     LuaSlideConfig   luaSlide;
+    HotkeysConfig    hotkeys;
     MiscConfig       misc;
 
     // Backward compatibility aliases (LegitBot)
@@ -372,6 +386,7 @@ struct MenuState
         , playerSlap(other.playerSlap)
         , fastSwitch(other.fastSwitch)
         , luaSlide(other.luaSlide)
+        , hotkeys(other.hotkeys)
         , misc(other.misc)
     {
     }
@@ -396,6 +411,7 @@ struct MenuState
             playerSlap = other.playerSlap;
             fastSwitch = other.fastSwitch;
             luaSlide = other.luaSlide;
+            hotkeys = other.hotkeys;
             misc = other.misc;
         }
         return *this;

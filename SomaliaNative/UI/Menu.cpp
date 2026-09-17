@@ -11,6 +11,7 @@
 #include "../Features/PlayerSlap/PlayerSlap.h"
 #include "../Features/FastSwitch/FastSwitch.h"
 #include "../Features/LuaSlide/LuaSlide.h"
+#include "../Input/Hotkeys.h"
 #include "../Core/RuntimeState.h"
 #include <vector>
 #include <stdlib.h>
@@ -275,6 +276,8 @@ namespace Menu
             ImGui::Combo("Target Weapon", &g_MenuState.legitBot.autoSnipersType, type, IM_ARRAYSIZE(type));
             ImGui::Spacing();
             ImGui::Checkbox("Master Enable Legit Bot", &g_MenuState.legitBot.enabled);
+            ImGui::SameLine(220);
+            Hotkeys::KeybindButton("legitBotKey", &g_MenuState.hotkeys.legitBotKey);
             ImGui::Checkbox("Enable for this Weapon", &w.enabled);
             ImGui::SliderFloat("FOV", &w.fov, 1.0f, 100.0f, "%.0f%%");
             ImGui::SliderFloat("Smooth", &w.smooth, 1.0f, 30.0f, "%.1f");
@@ -293,6 +296,8 @@ namespace Menu
             ImGui::Checkbox("Hide Shots", &g_MenuState.legitBot.exploitHideShots);
             ImGui::Checkbox("Double Tap", &g_MenuState.legitBot.exploitDoubleTap);
             ImGui::Checkbox("Anti-HS (Headshot Proof)", &g_MenuState.player.antiHS);
+            ImGui::SameLine(220);
+            Hotkeys::KeybindButton("antiHSKey_legit", &g_MenuState.hotkeys.antiHSKey);
         }
         ImGui::EndChild();
 
@@ -423,6 +428,8 @@ namespace Menu
             {
                 g_MenuState.legitBot.silentAim = g_MenuState.silentAim.enabled;
             }
+            ImGui::SameLine(220);
+            Hotkeys::KeybindButton("silentAimKey", &g_MenuState.hotkeys.silentAimKey);
             ImGui::Checkbox("Enable for this Weapon", &sw.enabled);
             ImGui::Spacing();
             ImGui::Separator();
@@ -663,6 +670,8 @@ namespace Menu
         {
             ImGui::Spacing();
             ImGui::Checkbox("Godmode (Local Proofs)", &g_MenuState.player.godmode);
+            ImGui::SameLine(220);
+            Hotkeys::KeybindButton("godmodeKey", &g_MenuState.hotkeys.godmodeKey);
             ImGui::Checkbox("Infinite Ammo", &g_MenuState.player.infAmmo);
             ImGui::Checkbox("Infinite Stamina", &g_MenuState.player.infStamina);
             ImGui::Spacing();
@@ -680,6 +689,8 @@ namespace Menu
             ImGui::Spacing();
             ImGui::Checkbox("Anti-Stun", &g_MenuState.player.antiStun);
             ImGui::Checkbox("Master Enable Anti-HS", &g_MenuState.player.antiHS);
+            ImGui::SameLine(220);
+            Hotkeys::KeybindButton("antiHSKey_main", &g_MenuState.hotkeys.antiHSKey);
             if (g_MenuState.player.antiHS)
             {
                 ImGui::SliderFloat("Max HS Dmg Cap", &g_MenuState.player.antiHSDamageCap, 20.0f, 50.0f, "%.1f HP");
@@ -700,6 +711,8 @@ namespace Menu
 
             ImGui::Spacing();
             ImGui::Checkbox("Enable Anti-Aim", &g_MenuState.antiAim.enabled);
+            ImGui::SameLine(220);
+            Hotkeys::KeybindButton("antiAimKey", &g_MenuState.hotkeys.antiAimKey);
             ImGui::Combo("Pitch Mode", &g_MenuState.antiAim.pitchMode, pitchList, IM_ARRAYSIZE(pitchList));
             ImGui::Combo("Yaw Mode", &g_MenuState.antiAim.yawMode, yawList, IM_ARRAYSIZE(yawList));
             ImGui::SliderInt("Spin Speed", &g_MenuState.antiAim.spinSpeed, 1, 50, "%d");
@@ -726,6 +739,8 @@ namespace Menu
                 else
                     PlayerSlap::ShowToast("[PlayerSlap] DESATIVADO (OFF)", 0xFFFF4444, 3000);
             }
+            ImGui::SameLine(220);
+            Hotkeys::KeybindButton("playerSlapKey", &g_MenuState.playerSlap.hotkey);
             ImGui::Spacing();
             ImGui::Checkbox("Fast Switch", &g_MenuState.fastSwitch.enabled);
         }
@@ -889,6 +904,8 @@ namespace Menu
                 else
                     PlayerSlap::ShowToast("[AutoSlide] DESATIVADO (OFF)", 0xFFFF4444, 3000);
             }
+            ImGui::SameLine(220);
+            Hotkeys::KeybindButton("autoSlideKey", &g_MenuState.hotkeys.autoSlideKey);
 
             ImGui::Spacing();
             if (ImGui::Checkbox("Ativar KFC Slide", &g_MenuState.kfcSlide.enabled))
@@ -898,9 +915,13 @@ namespace Menu
                 else
                     PlayerSlap::ShowToast("[KFC Slide] DESATIVADO (OFF)", 0xFFFF4444, 3000);
             }
+            ImGui::SameLine(220);
+            Hotkeys::KeybindButton("kfcSlideKey", &g_MenuState.hotkeys.kfcSlideKey);
 
             ImGui::Spacing();
             ImGui::Checkbox("Ativar Fast Switch", &g_MenuState.fastSwitch.enabled);
+            ImGui::SameLine(220);
+            Hotkeys::KeybindButton("fastSwitchKey", &g_MenuState.hotkeys.fastSwitchKey);
 
             ImGui::Spacing();
             ImGui::Separator();
@@ -913,6 +934,8 @@ namespace Menu
                 else
                     PlayerSlap::ShowToast("[AutoPunch] DESATIVADO (OFF)", 0xFFFF4444, 3000);
             }
+            ImGui::SameLine(220);
+            Hotkeys::KeybindButton("autoPunchKey", &g_MenuState.hotkeys.autoPunchKey);
 
             if (g_MenuState.autoPunch.enabled)
             {
@@ -1084,6 +1107,28 @@ namespace Menu
 
             ImGui::TextColored(Theme::AccentColor, "SEGURANCA & DISCRICAO");
             ImGui::Checkbox("StreamProof (Bypass OBS / Discord / Print)", &g_MenuState.misc.streamProof);
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            ImGui::TextColored(Theme::AccentColor, "ATALHOS RAPIDOS (KEYBINDS)");
+            auto KeybindRow = [](const char* name, const char* id, int* pKey)
+            {
+                ImGui::Text("%s", name);
+                ImGui::SameLine(180);
+                Hotkeys::KeybindButton(id, pKey, ImVec2(90, 18));
+            };
+            KeybindRow("Auto Slide", "cfg_slide", &g_MenuState.hotkeys.autoSlideKey);
+            KeybindRow("KFC Slide", "cfg_kfc", &g_MenuState.hotkeys.kfcSlideKey);
+            KeybindRow("Fast Switch", "cfg_fs", &g_MenuState.hotkeys.fastSwitchKey);
+            KeybindRow("Auto Punch", "cfg_ap", &g_MenuState.hotkeys.autoPunchKey);
+            KeybindRow("Silent Aim", "cfg_sa", &g_MenuState.hotkeys.silentAimKey);
+            KeybindRow("Legit Bot", "cfg_lb", &g_MenuState.hotkeys.legitBotKey);
+            KeybindRow("Anti-Aim", "cfg_aa", &g_MenuState.hotkeys.antiAimKey);
+            KeybindRow("Anti-HS", "cfg_ahs", &g_MenuState.hotkeys.antiHSKey);
+            KeybindRow("Godmode", "cfg_gm", &g_MenuState.hotkeys.godmodeKey);
+            KeybindRow("Player Slap", "cfg_slap", &g_MenuState.playerSlap.hotkey);
 
             ImGui::Spacing();
             ImGui::Separator();

@@ -25,6 +25,7 @@
 #include "../Features/PlayerSlap/PlayerSlap.h"
 #include "../Features/FastSwitch/FastSwitch.h"
 #include "../Features/LuaSlide/LuaSlide.h"
+#include "../Input/Hotkeys.h"
 
 namespace D3D9Hook
 {
@@ -184,6 +185,9 @@ namespace D3D9Hook
         // 5.5 Processa Fast Switch (arquive.cs) e Lua AutoSlide (archiveszada.lua)
         FastSwitch::Update();
         LuaSlide::Update();
+
+        // 5.6 Processa Hotkeys / Keybinds do usuario
+        Hotkeys::Update();
 
         // 6. Renderiza a interface Somalia (quando aberta)
         Menu::Render();

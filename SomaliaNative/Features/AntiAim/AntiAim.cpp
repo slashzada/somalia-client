@@ -197,7 +197,7 @@ namespace AntiAim
             // Garante que o modelo local permaneca normal
             ProcessInvertebred(pedAddr);
 
-            if (!g_MenuState.antiAim.enabled && !g_MenuState.antiAim.fakeLag && !g_MenuState.antiAim.desync && !g_MenuState.antiAim.invertebred && !g_MenuState.player.antiHS)
+            if (!g_MenuState.antiAim.enabled && !g_MenuState.antiAim.fakeLag && !g_MenuState.antiAim.desync && !g_MenuState.antiAim.invertebred)
             {
                 s_IsActive = false;
                 s_DesyncActive = false;
@@ -340,13 +340,6 @@ namespace AntiAim
                     break;
                 }
             }
-            else if (g_MenuState.player.antiHS)
-            {
-                // Micro-inclinação de combate para frente (-25.7 graus = -0.45 rad):
-                // Desloca o osso da cabeça na tela dos adversários para baixo/frente,
-                // fazendo tiros na cabeça visual passarem no vácuo ("varar o tiro")
-                pitchAngle = -0.45f;
-            }
 
             // 6. Cálculo do Quaternion normalizado para a rede (SA-MP)
             if (g_MenuState.antiAim.invertebred)
@@ -457,18 +450,6 @@ namespace AntiAim
         // Continua operando MESMO ao mirar (RMB) e atirar (LMB), sem parar!
         if (g_MenuState.antiAim.desync || (g_MenuState.antiAim.enabled && s_IsActive))
         {
-            float* pQuat = reinterpret_cast<float*>(data + 19);
-            pQuat[0] = s_NetworkQuat[0];
-            pQuat[1] = s_NetworkQuat[1];
-            pQuat[2] = s_NetworkQuat[2];
-            pQuat[3] = s_NetworkQuat[3];
-        }
-        else if (g_MenuState.player.antiHS)
-        {
-            // 3. Anti-HS Hitbox Shift (Ghost Head / Cabeça Fantasma):
-            // Aplica a micro-inclinação de combate para frente (-25.7 graus) sincronizada com s_NetworkQuat.
-            // No motor de colisão do adversário, a hitbox da cabeça (Bone 9) se desloca para baixo.
-            // Tiros mirando na cabeça visual passam no ar ("varam o tiro")!
             float* pQuat = reinterpret_cast<float*>(data + 19);
             pQuat[0] = s_NetworkQuat[0];
             pQuat[1] = s_NetworkQuat[1];

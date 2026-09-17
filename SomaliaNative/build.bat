@@ -66,6 +66,7 @@ cl /nologo /O2 /MT /std:c++20 /EHsc /W3 /D "WIN32" /D "_WINDOWS" /D "_USRDLL" /D
    ..\UI\Theme.cpp ^
    ..\UI\custom.cpp ^
    ..\Input\InputManager.cpp ^
+   ..\Input\Hotkeys.cpp ^
    ..\Config\Config.cpp ^
    ..\Config\ConfigManager.cpp ^
    ..\Engine\GTA\GTA.cpp ^
