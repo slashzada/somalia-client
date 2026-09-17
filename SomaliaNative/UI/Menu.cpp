@@ -881,7 +881,14 @@ namespace Menu
         ImGui::MenuChild("Ativações", ImVec2(320, 482));
         {
             ImGui::Spacing();
-            ImGui::Checkbox("Ativar Auto Slide", &g_MenuState.luaSlide.enabled);
+            if (ImGui::Checkbox("Ativar Auto Slide", &g_MenuState.luaSlide.enabled))
+            {
+                LuaSlide::SyncToIni();
+                if (g_MenuState.luaSlide.enabled)
+                    PlayerSlap::ShowToast("[AutoSlide] ATIVADO (ON)", 0xFF00FF88, 3000);
+                else
+                    PlayerSlap::ShowToast("[AutoSlide] DESATIVADO (OFF)", 0xFFFF4444, 3000);
+            }
 
             ImGui::Spacing();
             if (ImGui::Checkbox("Ativar KFC Slide", &g_MenuState.kfcSlide.enabled))

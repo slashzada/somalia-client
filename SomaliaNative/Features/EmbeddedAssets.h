@@ -282,7 +282,6 @@ function alternarScript()
     end
     loadedConfig.settings.scriptAtivo = scriptAtivo
     pcall(function() inicfg.save(loadedConfig, configFile) end)
-    sampAddChatMessage(scriptAtivo and "{00FF00}[Slide] ON" or "{FF0000}[Slide] OFF", -1)
 end
 
 function wasKeyPressed(key)

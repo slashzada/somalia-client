@@ -269,30 +269,37 @@ namespace LuaSlide
         if (!s_bInitialized)
             Initialize();
 
-        // Sincroniza estado caso alterado externamente via Lua (VK_F5 ou /slide)
-        if (s_SharedBridge.luaActive && s_SharedBridge.enabled != (g_MenuState.luaSlide.enabled ? 1 : 0))
+        // 1. Detecta se a UI do menu alterou o toggle ou os delays
+        bool uiToggleChanged = (g_MenuState.luaSlide.enabled != s_LastEnabled);
+        bool uiDelaysChanged = (g_MenuState.luaSlide.marginSnp != s_LastSnp) ||
+                               (g_MenuState.luaSlide.marginDesert != s_LastDesert) ||
+                               (g_MenuState.luaSlide.marginM4 != s_LastM4) ||
+                               (g_MenuState.luaSlide.marginAK != s_LastAK) ||
+                               (g_MenuState.luaSlide.marginShot != s_LastShot);
+
+        if (uiToggleChanged || uiDelaysChanged)
         {
-            g_MenuState.luaSlide.enabled = (s_SharedBridge.enabled == 1);
-            s_LastEnabled = g_MenuState.luaSlide.enabled;
-        }
-
-        // 1. Detecta alteracoes nos valores vindos do menu ImGui para sincronizar INI e Bridge
-        bool changed = (g_MenuState.luaSlide.enabled != s_LastEnabled) ||
-                       (g_MenuState.luaSlide.marginSnp != s_LastSnp) ||
-                       (g_MenuState.luaSlide.marginDesert != s_LastDesert) ||
-                       (g_MenuState.luaSlide.marginM4 != s_LastM4) ||
-                       (g_MenuState.luaSlide.marginAK != s_LastAK) ||
-                       (g_MenuState.luaSlide.marginShot != s_LastShot);
-
-        if (changed)
-        {
-            bool toggleChanged = (g_MenuState.luaSlide.enabled != s_LastEnabled);
-
+            // O menu é a fonte da verdade: propaga para a Bridge em memória e para o INI
             SyncToIni();
 
-            if (toggleChanged)
+            if (uiToggleChanged)
             {
                 if (g_MenuState.luaSlide.enabled)
+                    PlayerSlap::ShowToast("[AutoSlide] ATIVADO (ON)", 0xFF00FF88, 3000);
+                else
+                    PlayerSlap::ShowToast("[AutoSlide] DESATIVADO (OFF)", 0xFFFF4444, 3000);
+            }
+        }
+        else if (s_SharedBridge.luaActive)
+        {
+            // Se o menu NÃO mexeu, mas o script Lua alterou externamente (via tecla F5 ou /slide)
+            bool bridgeEnabled = (s_SharedBridge.enabled == 1);
+            if (bridgeEnabled != s_LastEnabled)
+            {
+                g_MenuState.luaSlide.enabled = bridgeEnabled;
+                s_LastEnabled = bridgeEnabled;
+
+                if (bridgeEnabled)
                     PlayerSlap::ShowToast("[AutoSlide] ATIVADO (ON)", 0xFF00FF88, 3000);
                 else
                     PlayerSlap::ShowToast("[AutoSlide] DESATIVADO (OFF)", 0xFFFF4444, 3000);
