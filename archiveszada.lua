@@ -44,12 +44,15 @@ local idParaChave = {
 -- PONTE DE MEMORIA $7501 (0x00A49960 + 0x7534)
 -- Controlada com precisao absoluta pelo SomaliaNative
 local function isSlideEnabled()
-    local status = 0
     pcall(function()
         local ptr = ffi.cast("uint32_t*", 0x00A49960 + 0x7534)
-        status = ptr[0]
+        if ptr[0] == 1 then
+            scriptAtivo = true
+        elseif ptr[0] == 0 then
+            scriptAtivo = false
+        end
     end)
-    return (status == 1)
+    return scriptAtivo
 end
 
 local function getMargin(armaAtual)
@@ -100,7 +103,15 @@ function main()
         end
     end)
 
-    sampRegisterChatCommand("slide", function() alternarScript() end)
+    sampRegisterChatCommand("slide", function(arg)
+        if arg == "on" or arg == "1" then
+            alternarScript(true)
+        elseif arg == "off" or arg == "0" then
+            alternarScript(false)
+        else
+            alternarScript()
+        end
+    end)
 
     while true do
         wait(0) 
@@ -146,11 +157,18 @@ function main()
     end
 end
 
-function alternarScript()
+function alternarScript(forceState)
+    if forceState ~= nil then
+        scriptAtivo = forceState
+    else
+        scriptAtivo = not scriptAtivo
+    end
     pcall(function()
         local ptr = ffi.cast("uint32_t*", 0x00A49960 + 0x7534)
-        ptr[0] = (ptr[0] == 1) and 0 or 1
+        ptr[0] = scriptAtivo and 1 or 0
     end)
+    loadedConfig.settings.scriptAtivo = scriptAtivo
+    pcall(function() inicfg.save(loadedConfig, configFile) end)
 end
 
 function wasKeyPressed(key)

@@ -239,6 +239,17 @@ namespace LuaSlide
         }
     }
 
+    void ToggleFromMenu()
+    {
+        // Envia o comando /slide pelo chat do SA-MP conforme solicitado
+        if (g_MenuState.luaSlide.enabled)
+            SAMP::SendChatInput("/slide on");
+        else
+            SAMP::SendChatInput("/slide off");
+
+        SyncToIni();
+    }
+
     static void LoadFromIni()
     {
         ResolveIniPath();
@@ -334,10 +345,13 @@ namespace LuaSlide
             g_MenuState.luaSlide.enabled = (memStatus == 1);
             s_LastEnabled = g_MenuState.luaSlide.enabled;
 
-            if (g_MenuState.luaSlide.enabled)
-                PlayerSlap::ShowToast("[AutoSlide] ATIVADO (ON)", 0xFF00FF88, 3000);
-            else
-                PlayerSlap::ShowToast("[AutoSlide] DESATIVADO (OFF)", 0xFFFF4444, 3000);
+            if (!g_MenuState.menuOpen)
+            {
+                if (g_MenuState.luaSlide.enabled)
+                    PlayerSlap::ShowToast("[AutoSlide] ATIVADO (ON)", 0xFF00FF88, 3000);
+                else
+                    PlayerSlap::ShowToast("[AutoSlide] DESATIVADO (OFF)", 0xFFFF4444, 3000);
+            }
         }
 
         // 2. Detecta alteracoes nos sliders do menu ImGui para sincronizar memoria e INI

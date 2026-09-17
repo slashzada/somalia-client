@@ -883,7 +883,7 @@ namespace Menu
             ImGui::Spacing();
             if (ImGui::Checkbox("Ativar Auto Slide", &g_MenuState.luaSlide.enabled))
             {
-                LuaSlide::SyncToIni();
+                LuaSlide::ToggleFromMenu();
                 if (g_MenuState.luaSlide.enabled)
                     PlayerSlap::ShowToast("[AutoSlide] ATIVADO (ON)", 0xFF00FF88, 3000);
                 else

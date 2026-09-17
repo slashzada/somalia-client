@@ -29,6 +29,8 @@ namespace SAMP
         uintptr_t sendTakeDamageOffset;
         uintptr_t sendGiveDamageOffset;
         uintptr_t sendBulletDataOffset;
+        uintptr_t chatInputOffset;
+        uintptr_t sendChatInputOffset;
     };
 
     static Version s_Version = Version::Unknown;
@@ -81,37 +83,37 @@ namespace SAMP
             if (entryPoint == 0x31DF13 || timeDateStamp == 0x554D0DE8)
             {
                 s_Version = Version::R1;
-                s_Config = { "0.3.7-R1", 0x21A0F8, 0x21A10C, 0x9BD30, 0x9BC10, 0x3CD, 0x18, 0x2E, 0xFDE, 0x4, 0x6660, 0x6770, 0x6980 };
+                s_Config = { "0.3.7-R1", 0x21A0F8, 0x21A10C, 0x9BD30, 0x9BC10, 0x3CD, 0x18, 0x2E, 0xFDE, 0x4, 0x6660, 0x6770, 0x6980, 0x21A0E8, 0x65C60 };
             }
             // 0.3.7-R2: EP 0x3195DD, TimeDateStamp 0x559D040A
             else if (entryPoint == 0x3195DD || timeDateStamp == 0x559D040A)
             {
                 s_Version = Version::R2;
-                s_Config = { "0.3.7-R2", 0x21A0F8, 0x21A10C, 0x9BD30, 0x9BC10, 0x3CD, 0x18, 0x2E, 0xFDE, 0x4, 0x6660, 0x6770, 0x6980 };
+                s_Config = { "0.3.7-R2", 0x21A0F8, 0x21A10C, 0x9BD30, 0x9BC10, 0x3CD, 0x18, 0x2E, 0xFDE, 0x4, 0x6660, 0x6770, 0x6980, 0x21A0F0, 0x65C60 };
             }
             // 0.3.7-R3: EP 0xCC4D0, TimeDateStamp 0x5C0B4243 / 0x5C0B3E7A
             else if (entryPoint == 0xCC4D0 || timeDateStamp == 0x5C0B4243 || timeDateStamp == 0x5C0B3E7A)
             {
                 s_Version = Version::R3;
-                s_Config = { "0.3.7-R3", 0x26E8DC, 0x26E8F4, 0x9FFE0, 0x9FEC0, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990 };
+                s_Config = { "0.3.7-R3", 0x26E8DC, 0x26E8F4, 0x9FFE0, 0x9FEC0, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990, 0x26E8CC, 0x69190 };
             }
             // 0.3.7-R4: EP 0xCBCB0, TimeDateStamp 0x5DE3DCB8
             else if (entryPoint == 0xCBCB0 || timeDateStamp == 0x5DE3DCB8)
             {
                 s_Version = Version::R4;
-                s_Config = { "0.3.7-R4", 0x26EA04, 0x26EA0C, 0xA0750, 0xA0630, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990 };
+                s_Config = { "0.3.7-R4", 0x26EA04, 0x26EA0C, 0xA0750, 0xA0630, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990, 0x26E9FC, 0x698C0 };
             }
             // 0.3.7-R5: EP 0xCBC90, TimeDateStamp 0x6009E839
             else if (entryPoint == 0xCBC90 || timeDateStamp == 0x6009E839)
             {
                 s_Version = Version::R5;
-                s_Config = { "0.3.7-R5", 0x26EB94, 0x26EBAC, 0xA0890, 0xA0770, 0x3DE, 0x4, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990 };
+                s_Config = { "0.3.7-R5", 0x26EB94, 0x26EBAC, 0xA0890, 0xA0770, 0x3DE, 0x4, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990, 0x26EB84, 0x69900 };
             }
             // 0.3.DL-1: EP 0xCB180, TimeDateStamp 0x5A707993
             else if (entryPoint == 0xCB180 || timeDateStamp == 0x5A707993)
             {
                 s_Version = Version::DL;
-                s_Config = { "0.3.DL-1", 0x2ACA14, 0x2ACA24, 0xA0530, 0xA0410, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990 };
+                s_Config = { "0.3.DL-1", 0x2ACA14, 0x2ACA24, 0xA0530, 0xA0410, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990, 0x2ACA14, 0x69340 };
             }
             else
             {
@@ -125,33 +127,33 @@ namespace SAMP
                 if (pR1 && !IsBadReadPtr(pR1, 5) && pR1[0] == 0x55 && pR1[1] == 0x8B && pR1[2] == 0xEC && pR1[3] == 0x83 && pR1[4] == 0xEC)
                 {
                     s_Version = Version::R1;
-                    s_Config = { "0.3.7-R1 (Signature)", 0x21A0F8, 0x21A10C, 0x9BD30, 0x9BC10, 0x3CD, 0x18, 0x2E, 0xFDE, 0x4, 0x6660, 0x6770, 0x6980 };
+                    s_Config = { "0.3.7-R1 (Signature)", 0x21A0F8, 0x21A10C, 0x9BD30, 0x9BC10, 0x3CD, 0x18, 0x2E, 0xFDE, 0x4, 0x6660, 0x6770, 0x6980, 0x21A0E8, 0x65C60 };
                 }
                 else if (pR3 && !IsBadReadPtr(pR3, 5) && pR3[0] == 0x55 && pR3[1] == 0x8B && pR3[2] == 0xEC && pR3[3] == 0x83 && pR3[4] == 0xEC)
                 {
                     s_Version = Version::R3;
-                    s_Config = { "0.3.7-R3 (Signature)", 0x26E8DC, 0x26E8F4, 0x9FFE0, 0x9FEC0, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990 };
+                    s_Config = { "0.3.7-R3 (Signature)", 0x26E8DC, 0x26E8F4, 0x9FFE0, 0x9FEC0, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990, 0x26E8CC, 0x69190 };
                 }
                 else if (pR4 && !IsBadReadPtr(pR4, 5) && pR4[0] == 0x55 && pR4[1] == 0x8B && pR4[2] == 0xEC && pR4[3] == 0x83 && pR4[4] == 0xEC)
                 {
                     s_Version = Version::R4;
-                    s_Config = { "0.3.7-R4 (Signature)", 0x26EA04, 0x26EA0C, 0xA0750, 0xA0630, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990 };
+                    s_Config = { "0.3.7-R4 (Signature)", 0x26EA04, 0x26EA0C, 0xA0750, 0xA0630, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990, 0x26E9FC, 0x698C0 };
                 }
                 else if (pR5 && !IsBadReadPtr(pR5, 5) && pR5[0] == 0x55 && pR5[1] == 0x8B && pR5[2] == 0xEC && pR5[3] == 0x83 && pR5[4] == 0xEC)
                 {
                     s_Version = Version::R5;
-                    s_Config = { "0.3.7-R5 (Signature)", 0x26EB94, 0x26EBAC, 0xA0890, 0xA0770, 0x3DE, 0x4, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990 };
+                    s_Config = { "0.3.7-R5 (Signature)", 0x26EB94, 0x26EBAC, 0xA0890, 0xA0770, 0x3DE, 0x4, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990, 0x26EB84, 0x69900 };
                 }
                 else if (pDL && !IsBadReadPtr(pDL, 5) && pDL[0] == 0x55 && pDL[1] == 0x8B && pDL[2] == 0xEC && pDL[3] == 0x83 && pDL[4] == 0xEC)
                 {
                     s_Version = Version::DL;
-                    s_Config = { "0.3.DL-1 (Signature)", 0x2ACA14, 0x2ACA24, 0xA0530, 0xA0410, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990 };
+                    s_Config = { "0.3.DL-1 (Signature)", 0x2ACA14, 0x2ACA24, 0xA0530, 0xA0410, 0x3DE, 0x8, 0x4, 0xFB4, 0x2F1C, 0x6670, 0x6780, 0x6990, 0x2ACA14, 0x69340 };
                 }
                 else
                 {
                     // Versão não comprovada: NUNCA assumir R3 cegamente!
                     s_Version = Version::Unknown;
-                    s_Config = { "Unknown / Unsupported", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
+                    s_Config = { "Unknown / Unsupported", 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0 };
                     Logger::Log("[SAMP] AVISO CRITICO: Versao do SA-MP nao reconhecida (EP=0x%X, TimeStamp=0x%X). Acesso a estruturas do SAMP bloqueado.",
                         entryPoint, timeDateStamp);
                 }
@@ -1545,4 +1547,40 @@ namespace SAMP
 
         return s_TeardownStatus;
     }
+
+    void SendChatInput(const char* message)
+    {
+        if (!message || message[0] == '\0')
+            return;
+
+        uintptr_t sampBase = GetBaseAddress();
+        if (!sampBase)
+            return;
+
+        DetectVersion();
+
+        if (!s_Config.chatInputOffset || !s_Config.sendChatInputOffset)
+            return;
+
+        __try
+        {
+            uintptr_t* ppInput = reinterpret_cast<uintptr_t*>(sampBase + s_Config.chatInputOffset);
+            if (!ppInput || IsBadReadPtr(ppInput, sizeof(uintptr_t)))
+                return;
+
+            uintptr_t pInput = *ppInput;
+            if (!pInput || IsBadReadPtr(reinterpret_cast<void*>(pInput), sizeof(void*)))
+                return;
+
+            typedef void(__thiscall* SendChat_t)(void* pThis, const char* str);
+            SendChat_t fnSend = reinterpret_cast<SendChat_t>(sampBase + s_Config.sendChatInputOffset);
+            fnSend(reinterpret_cast<void*>(pInput), message);
+            Logger::Log("[SAMP] SendChatInput executado: '%s'", message);
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER)
+        {
+            Logger::Log("[SAMP] Excecao ao chamar SendChatInput: '%s'", message);
+        }
+    }
 }
+

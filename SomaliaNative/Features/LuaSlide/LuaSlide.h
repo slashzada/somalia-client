@@ -8,6 +8,7 @@ namespace LuaSlide
     void Reset();
     void Update();
     void SyncToIni();
+    void ToggleFromMenu();
     bool IsIniFound();
     void Cleanup();
 }
