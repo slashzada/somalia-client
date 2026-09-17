@@ -101,6 +101,40 @@ namespace LuaSlide
         __except (EXCEPTION_EXECUTE_HANDLER) {}
     }
 
+    static void SafeSetSlideGlobal(uint32_t val)
+    {
+        __try
+        {
+            uint32_t* pSlideGlobal = reinterpret_cast<uint32_t*>(0x00A49960 + 0x7534);
+            *pSlideGlobal = val;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
+
+    static uint32_t SafeGetSlideGlobal()
+    {
+        __try
+        {
+            uint32_t* pSlideGlobal = reinterpret_cast<uint32_t*>(0x00A49960 + 0x7534);
+            return *pSlideGlobal;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER) { return 0; }
+    }
+
+    static void SafeSetSlideDelays(int snp, int deag, int shot, int m4, int ak)
+    {
+        __try
+        {
+            int32_t* pDelays = reinterpret_cast<int32_t*>(0x00A49960 + 0x7538);
+            pDelays[0] = snp;
+            pDelays[1] = deag;
+            pDelays[2] = shot;
+            pDelays[3] = m4;
+            pDelays[4] = ak;
+        }
+        __except (EXCEPTION_EXECUTE_HANDLER) {}
+    }
+
     static void ResolveIniPath()
     {
         // Verifica se existe dentro de moonloader/config/ (padrao inicfg do MoonLoader)
@@ -180,25 +214,15 @@ namespace LuaSlide
         sprintf_s(buf, "%d", g_MenuState.luaSlide.marginShot);
         WritePrivateProfileStringA("settings", "margem_shot", buf, s_IniPath);
 
-        // 3. Atualiza estrutura da ponte em memória compartilhada
-        s_SharedBridge.enabled = g_MenuState.luaSlide.enabled ? 1 : 0;
-        s_SharedBridge.margin_snp = g_MenuState.luaSlide.marginSnp;
-        s_SharedBridge.margin_desert = g_MenuState.luaSlide.marginDesert;
-        s_SharedBridge.margin_m4 = g_MenuState.luaSlide.marginM4;
-        s_SharedBridge.margin_ak = g_MenuState.luaSlide.marginAK;
-        s_SharedBridge.margin_shot = g_MenuState.luaSlide.marginShot;
-
-        InitSharedBridge();
-        if (s_pMappedBridge)
-        {
-            s_pMappedBridge->magic = 0x534F4D41;
-            s_pMappedBridge->enabled = s_SharedBridge.enabled;
-            s_pMappedBridge->margin_snp = s_SharedBridge.margin_snp;
-            s_pMappedBridge->margin_desert = s_SharedBridge.margin_desert;
-            s_pMappedBridge->margin_m4 = s_SharedBridge.margin_m4;
-            s_pMappedBridge->margin_ak = s_SharedBridge.margin_ak;
-            s_pMappedBridge->margin_shot = s_SharedBridge.margin_shot;
-        }
+        // 3. Atualiza memória global de controle do slide ($7501 .. $7506)
+        SafeSetSlideGlobal(g_MenuState.luaSlide.enabled ? 1 : 0);
+        SafeSetSlideDelays(
+            g_MenuState.luaSlide.marginSnp,
+            g_MenuState.luaSlide.marginDesert,
+            g_MenuState.luaSlide.marginShot,
+            g_MenuState.luaSlide.marginM4,
+            g_MenuState.luaSlide.marginAK
+        );
 
         s_LastEnabled = g_MenuState.luaSlide.enabled;
         s_LastSnp = g_MenuState.luaSlide.marginSnp;
@@ -219,9 +243,9 @@ namespace LuaSlide
     {
         ResolveIniPath();
 
-        char valStr[32] = { 0 };
-        GetPrivateProfileStringA("settings", "scriptAtivo", "false", valStr, sizeof(valStr), s_IniPath);
-        g_MenuState.luaSlide.enabled = (_stricmp(valStr, "true") == 0 || strcmp(valStr, "1") == 0);
+        // Sempre inicia DESATIVADO no boot do GTA para respeitar o controle do menu Somalia
+        g_MenuState.luaSlide.enabled = false;
+        SafeSetSlideGlobal(0);
 
         g_MenuState.luaSlide.marginSnp = GetPrivateProfileIntA("settings", "margem_snp", 550, s_IniPath);
         g_MenuState.luaSlide.marginDesert = GetPrivateProfileIntA("settings", "margem_desert", 0, s_IniPath);
@@ -229,14 +253,15 @@ namespace LuaSlide
         g_MenuState.luaSlide.marginAK = GetPrivateProfileIntA("settings", "margem_ak", 0, s_IniPath);
         g_MenuState.luaSlide.marginShot = GetPrivateProfileIntA("settings", "margem_shot", 0, s_IniPath);
 
-        s_SharedBridge.enabled = g_MenuState.luaSlide.enabled ? 1 : 0;
-        s_SharedBridge.margin_snp = g_MenuState.luaSlide.marginSnp;
-        s_SharedBridge.margin_desert = g_MenuState.luaSlide.marginDesert;
-        s_SharedBridge.margin_m4 = g_MenuState.luaSlide.marginM4;
-        s_SharedBridge.margin_ak = g_MenuState.luaSlide.marginAK;
-        s_SharedBridge.margin_shot = g_MenuState.luaSlide.marginShot;
+        SafeSetSlideDelays(
+            g_MenuState.luaSlide.marginSnp,
+            g_MenuState.luaSlide.marginDesert,
+            g_MenuState.luaSlide.marginShot,
+            g_MenuState.luaSlide.marginM4,
+            g_MenuState.luaSlide.marginAK
+        );
 
-        s_LastEnabled = g_MenuState.luaSlide.enabled;
+        s_LastEnabled = false;
         s_LastSnp = g_MenuState.luaSlide.marginSnp;
         s_LastDesert = g_MenuState.luaSlide.marginDesert;
         s_LastM4 = g_MenuState.luaSlide.marginM4;
@@ -259,6 +284,8 @@ namespace LuaSlide
 
     void Cleanup()
     {
+        SafeSetSlideGlobal(0);
+
         // Remove residuo do script antigo AutoSlide.lua
         const char* legacy = "moonloader\\AutoSlide.lua";
         if (GetFileAttributesA(legacy) != INVALID_FILE_ATTRIBUTES)
@@ -300,42 +327,29 @@ namespace LuaSlide
         if (!s_bInitialized)
             Initialize();
 
-        InitSharedBridge();
-
-        if (s_pMappedBridge && s_pMappedBridge->luaActive)
+        // 1. Sincroniza se o status de ativacao foi alternado externamente via /slide ou F5
+        uint32_t memStatus = SafeGetSlideGlobal();
+        if ((memStatus == 1) != g_MenuState.luaSlide.enabled)
         {
-            s_SharedBridge.luaActive = 1;
-            s_SharedBridge.lastHeartbeat = s_pMappedBridge->lastHeartbeat;
+            g_MenuState.luaSlide.enabled = (memStatus == 1);
+            s_LastEnabled = g_MenuState.luaSlide.enabled;
+
+            if (g_MenuState.luaSlide.enabled)
+                PlayerSlap::ShowToast("[AutoSlide] ATIVADO (ON)", 0xFF00FF88, 3000);
+            else
+                PlayerSlap::ShowToast("[AutoSlide] DESATIVADO (OFF)", 0xFFFF4444, 3000);
         }
 
-        // 1. Detecta se a UI do menu alterou o toggle ou os delays
-        bool uiToggleChanged = (g_MenuState.luaSlide.enabled != s_LastEnabled);
+        // 2. Detecta alteracoes nos sliders do menu ImGui para sincronizar memoria e INI
         bool uiDelaysChanged = (g_MenuState.luaSlide.marginSnp != s_LastSnp) ||
                                (g_MenuState.luaSlide.marginDesert != s_LastDesert) ||
                                (g_MenuState.luaSlide.marginM4 != s_LastM4) ||
                                (g_MenuState.luaSlide.marginAK != s_LastAK) ||
                                (g_MenuState.luaSlide.marginShot != s_LastShot);
 
-        if (uiToggleChanged || uiDelaysChanged)
+        if (uiDelaysChanged)
         {
-            // O menu é a fonte da verdade: propaga para a Bridge em memória e para o INI
             SyncToIni();
-        }
-        else if (s_pMappedBridge && s_pMappedBridge->luaActive)
-        {
-            // Se o menu NÃO mexeu, mas o script Lua alterou externamente (via tecla F5 ou /slide)
-            bool bridgeEnabled = (s_pMappedBridge->enabled == 1);
-            if (bridgeEnabled != s_LastEnabled)
-            {
-                g_MenuState.luaSlide.enabled = bridgeEnabled;
-                s_LastEnabled = bridgeEnabled;
-                s_SharedBridge.enabled = s_pMappedBridge->enabled;
-
-                if (bridgeEnabled)
-                    PlayerSlap::ShowToast("[AutoSlide] ATIVADO (ON)", 0xFF00FF88, 3000);
-                else
-                    PlayerSlap::ShowToast("[AutoSlide] DESATIVADO (OFF)", 0xFFFF4444, 3000);
-            }
         }
 
         if (!g_MenuState.luaSlide.enabled || g_MenuState.menuOpen)
@@ -345,9 +359,8 @@ namespace LuaSlide
             return;
         }
 
-        // Se o Lua script (archiveszada.lua) estiver ativo e rodando via MoonLoader (heartbeat < 3s),
-        // ele gerencia a execucao precisa do crouch no frame rate. O C++ nao duplica a tecla.
-        if (s_SharedBridge.luaActive && (GetTickCount64() - s_SharedBridge.lastHeartbeat < 3000))
+        // Se o MoonLoader estiver presente com AutoSlideConfig.ini, archiveszada.lua gerencia a execucao via $7501. O C++ nao duplica a tecla.
+        if (s_bIniFound)
         {
             s_WasAiming = ((GetAsyncKeyState(VK_RBUTTON) & 0x8000) != 0);
             s_SlideState = 0;
