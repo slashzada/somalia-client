@@ -7,7 +7,6 @@
 #include "../Features/Aimbot/RageBot.h"
 #include "../Features/SilentAim/SilentAim.h"
 #include "../Features/KFCSlide/KFCSlide.h"
-#include "../Features/AutoSlide/AutoSlide.h"
 #include "../Features/AutoPunch/AutoPunch.h"
 #include "../Features/AntiAim/AntiAim.h"
 #include "../Features/LocalMods/LocalMods.h"
@@ -178,7 +177,6 @@ namespace RuntimeState
         SilentAim::Reset();
         RageBot::Reset();
         KFCSlide::Reset();
-        AutoSlide::Reset();
         AutoPunch::Reset();
         AntiAim::Reset();
         LocalMods::Reset();
@@ -200,7 +198,6 @@ namespace RuntimeState
         SilentAim::Reset();
         RageBot::Reset();
         KFCSlide::Reset();
-        AutoSlide::Reset();
         AntiAim::Reset();
     }
 

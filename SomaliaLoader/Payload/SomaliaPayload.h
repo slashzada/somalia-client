@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 #include <cstddef>
 
 // Payload nativo do Somalia embutido diretamente no Loader (.exe standalone)

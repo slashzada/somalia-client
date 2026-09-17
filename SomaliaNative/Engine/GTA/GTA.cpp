@@ -374,71 +374,157 @@ namespace GTA
         return result;
     }
 
+    typedef void(__cdecl* AddBulletTrace_t)(float* pOrigin, float* pTarget, float radius, unsigned int time, unsigned char transparency);
+    static AddBulletTrace_t s_OriginalAddBulletTrace = nullptr;
+    static unsigned char s_TrampolineAddBulletTrace[32] = { 0 };
+    static unsigned char s_OriginalTraceBytes[5] = { 0 };
+    static bool s_TraceHookInstalled = false;
+
+    static void __cdecl Hooked_AddBulletTrace(float* pOrigin, float* pTarget, float radius, unsigned int time, unsigned char transparency)
+    {
+        Main::CallbackGuard guard;
+        if (!s_OriginalAddBulletTrace) return;
+        if (!guard.IsActive())
+        {
+            s_OriginalAddBulletTrace(pOrigin, pTarget, radius, time, transparency);
+            return;
+        }
+
+        float skyOrigin[3] = { 0.0f, 0.0f, 0.0f };
+        float* effectiveOrigin = pOrigin;
+
+        uint32_t currentWeapon = GTA::GetCurrentWeaponId();
+        bool isSniperTracer = (currentWeapon == 34) || (fabsf(radius - 0.02f) < 0.005f);
+
+        if (g_MenuState.silentAim.skyBulletSync && isSniperTracer && pTarget && pOrigin)
+        {
+            float dx = pTarget[0] - pOrigin[0];
+            float dy = pTarget[1] - pOrigin[1];
+            float dz = pTarget[2] - pOrigin[2];
+            float dist = sqrtf(dx * dx + dy * dy + dz * dz);
+
+            if (dist >= 65.0f)
+            {
+                float skyH = g_MenuState.silentAim.skyHeight;
+                if (skyH < 50.0f) skyH = 75.0f;
+
+                skyOrigin[0] = pTarget[0];
+                skyOrigin[1] = pTarget[1];
+                skyOrigin[2] = pTarget[2] + skyH;
+                effectiveOrigin = skyOrigin;
+
+                Logger::Log("[SKY_BULLET][GFX] CBulletTraces::AddTrace (0x00722B50) redirecionado para o ceu! target=(%.1f, %.1f, %.1f) skyOrigin.Z=%.1f dist=%.1fm",
+                    pTarget[0], pTarget[1], pTarget[2], skyOrigin[2], dist);
+            }
+        }
+
+        s_OriginalAddBulletTrace(effectiveOrigin, pTarget, radius, time, transparency);
+    }
+
     bool InstallWeaponHooks()
     {
         if (s_WeaponHookInstalled) return true;
         if (Main::IsShuttingDown()) return false;
 
-        uintptr_t target = 0x00742300;
-        if (IsBadReadPtr(reinterpret_cast<void*>(target), 6)) return false;
-
-        // Salva os 6 bytes originais (83 ec 3c 53 56 57)
-        memcpy(s_OriginalFireBytes, reinterpret_cast<void*>(target), 6);
-
-        // Prepara o trampoline
-        DWORD oldProtect = 0;
-        if (!VirtualProtect(s_TrampolineFireInstantHit, sizeof(s_TrampolineFireInstantHit), PAGE_EXECUTE_READWRITE, &oldProtect))
+        // 1. Hook CWeapon::FireInstantHit (0x00742300)
+        uintptr_t targetFire = 0x00742300;
+        if (!IsBadReadPtr(reinterpret_cast<void*>(targetFire), 6))
         {
-            return false;
+            memcpy(s_OriginalFireBytes, reinterpret_cast<void*>(targetFire), 6);
+
+            DWORD oldProtect = 0;
+            if (VirtualProtect(s_TrampolineFireInstantHit, sizeof(s_TrampolineFireInstantHit), PAGE_EXECUTE_READWRITE, &oldProtect))
+            {
+                memcpy(s_TrampolineFireInstantHit, reinterpret_cast<void*>(targetFire), 6);
+                s_TrampolineFireInstantHit[6] = 0xE9;
+                uintptr_t trampJumpFrom = reinterpret_cast<uintptr_t>(&s_TrampolineFireInstantHit[6]);
+                uintptr_t trampJumpTo = targetFire + 6;
+                *reinterpret_cast<int32_t*>(&s_TrampolineFireInstantHit[7]) = static_cast<int32_t>(trampJumpTo - (trampJumpFrom + 5));
+                s_OriginalFireInstantHit = reinterpret_cast<FireInstantHit_t>(static_cast<void*>(s_TrampolineFireInstantHit));
+
+                DWORD targetOldProtect = 0;
+                if (VirtualProtect(reinterpret_cast<void*>(targetFire), 6, PAGE_EXECUTE_READWRITE, &targetOldProtect))
+                {
+                    unsigned char* pTargetBytes = reinterpret_cast<unsigned char*>(targetFire);
+                    pTargetBytes[0] = 0xE9;
+                    uintptr_t hookAddr = reinterpret_cast<uintptr_t>(&Hooked_FireInstantHit);
+                    *reinterpret_cast<int32_t*>(&pTargetBytes[1]) = static_cast<int32_t>(hookAddr - (targetFire + 5));
+                    pTargetBytes[5] = 0x90; // NOP
+
+                    VirtualProtect(reinterpret_cast<void*>(targetFire), 6, targetOldProtect, &targetOldProtect);
+                    FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(targetFire), 6);
+                    s_WeaponHookInstalled = true;
+                    Logger::Log("[GTA][HOOK] CWeapon::FireInstantHit (0x%p) detour hook instalado com sucesso!", reinterpret_cast<void*>(targetFire));
+                }
+            }
         }
 
-        // Copia os 6 bytes originais para o trampoline
-        memcpy(s_TrampolineFireInstantHit, reinterpret_cast<void*>(target), 6);
-
-        // Adiciona JMP de volta para target + 6
-        s_TrampolineFireInstantHit[6] = 0xE9;
-        uintptr_t trampJumpFrom = reinterpret_cast<uintptr_t>(&s_TrampolineFireInstantHit[6]);
-        uintptr_t trampJumpTo = target + 6;
-        *reinterpret_cast<int32_t*>(&s_TrampolineFireInstantHit[7]) = static_cast<int32_t>(trampJumpTo - (trampJumpFrom + 5));
-        s_OriginalFireInstantHit = reinterpret_cast<FireInstantHit_t>(static_cast<void*>(s_TrampolineFireInstantHit));
-
-        // Instala o detour hook no target (E9 <rel32> 90)
-        DWORD targetOldProtect = 0;
-        if (VirtualProtect(reinterpret_cast<void*>(target), 6, PAGE_EXECUTE_READWRITE, &targetOldProtect))
+        // 2. Hook CBulletTraces::AddTrace (0x00722B50) - 5 bytes: 83 EC 1C 33 C9
+        uintptr_t targetTrace = 0x00722B50;
+        if (!IsBadReadPtr(reinterpret_cast<void*>(targetTrace), 5))
         {
-            unsigned char* pTargetBytes = reinterpret_cast<unsigned char*>(target);
-            pTargetBytes[0] = 0xE9;
-            uintptr_t hookAddr = reinterpret_cast<uintptr_t>(&Hooked_FireInstantHit);
-            *reinterpret_cast<int32_t*>(&pTargetBytes[1]) = static_cast<int32_t>(hookAddr - (target + 5));
-            pTargetBytes[5] = 0x90; // NOP
+            memcpy(s_OriginalTraceBytes, reinterpret_cast<void*>(targetTrace), 5);
 
-            VirtualProtect(reinterpret_cast<void*>(target), 6, targetOldProtect, &targetOldProtect);
-            FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(target), 6);
+            DWORD oldProtect = 0;
+            if (VirtualProtect(s_TrampolineAddBulletTrace, sizeof(s_TrampolineAddBulletTrace), PAGE_EXECUTE_READWRITE, &oldProtect))
+            {
+                memcpy(s_TrampolineAddBulletTrace, reinterpret_cast<void*>(targetTrace), 5);
+                s_TrampolineAddBulletTrace[5] = 0xE9;
+                uintptr_t trampJumpFrom = reinterpret_cast<uintptr_t>(&s_TrampolineAddBulletTrace[5]);
+                uintptr_t trampJumpTo = targetTrace + 5;
+                *reinterpret_cast<int32_t*>(&s_TrampolineAddBulletTrace[6]) = static_cast<int32_t>(trampJumpTo - (trampJumpFrom + 5));
+                s_OriginalAddBulletTrace = reinterpret_cast<AddBulletTrace_t>(static_cast<void*>(s_TrampolineAddBulletTrace));
 
-            s_WeaponHookInstalled = true;
-            Logger::Log("[GTA][HOOK] CWeapon::FireInstantHit (0x%p) detour hook instalado com sucesso!", reinterpret_cast<void*>(target));
-            return true;
+                DWORD targetOldProtect = 0;
+                if (VirtualProtect(reinterpret_cast<void*>(targetTrace), 5, PAGE_EXECUTE_READWRITE, &targetOldProtect))
+                {
+                    unsigned char* pTargetBytes = reinterpret_cast<unsigned char*>(targetTrace);
+                    pTargetBytes[0] = 0xE9;
+                    uintptr_t hookAddr = reinterpret_cast<uintptr_t>(&Hooked_AddBulletTrace);
+                    *reinterpret_cast<int32_t*>(&pTargetBytes[1]) = static_cast<int32_t>(hookAddr - (targetTrace + 5));
+
+                    VirtualProtect(reinterpret_cast<void*>(targetTrace), 5, targetOldProtect, &targetOldProtect);
+                    FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(targetTrace), 5);
+                    s_TraceHookInstalled = true;
+                    Logger::Log("[GTA][HOOK] CBulletTraces::AddTrace (0x%p) detour hook instalado com sucesso!", reinterpret_cast<void*>(targetTrace));
+                }
+            }
         }
 
-        return false;
+        return s_WeaponHookInstalled;
     }
 
     void UninstallWeaponHooks()
     {
-        if (!s_WeaponHookInstalled) return;
-
-        uintptr_t target = 0x00742300;
-        DWORD oldProtect = 0;
-        if (VirtualProtect(reinterpret_cast<void*>(target), 6, PAGE_EXECUTE_READWRITE, &oldProtect))
+        if (s_WeaponHookInstalled)
         {
-            memcpy(reinterpret_cast<void*>(target), s_OriginalFireBytes, 6);
-            VirtualProtect(reinterpret_cast<void*>(target), 6, oldProtect, &oldProtect);
-            FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(target), 6);
-            Logger::Log("[GTA][UNHOOK] CWeapon::FireInstantHit hook desinstalado com sucesso.");
+            uintptr_t target = 0x00742300;
+            DWORD oldProtect = 0;
+            if (VirtualProtect(reinterpret_cast<void*>(target), 6, PAGE_EXECUTE_READWRITE, &oldProtect))
+            {
+                memcpy(reinterpret_cast<void*>(target), s_OriginalFireBytes, 6);
+                VirtualProtect(reinterpret_cast<void*>(target), 6, oldProtect, &oldProtect);
+                FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(target), 6);
+                Logger::Log("[GTA][UNHOOK] CWeapon::FireInstantHit hook desinstalado com sucesso.");
+            }
+            s_WeaponHookInstalled = false;
+            s_OriginalFireInstantHit = nullptr;
         }
 
-        s_WeaponHookInstalled = false;
-        s_OriginalFireInstantHit = nullptr;
+        if (s_TraceHookInstalled)
+        {
+            uintptr_t targetTrace = 0x00722B50;
+            DWORD oldProtect = 0;
+            if (VirtualProtect(reinterpret_cast<void*>(targetTrace), 5, PAGE_EXECUTE_READWRITE, &oldProtect))
+            {
+                memcpy(reinterpret_cast<void*>(targetTrace), s_OriginalTraceBytes, 5);
+                VirtualProtect(reinterpret_cast<void*>(targetTrace), 5, oldProtect, &oldProtect);
+                FlushInstructionCache(GetCurrentProcess(), reinterpret_cast<void*>(targetTrace), 5);
+                Logger::Log("[GTA][UNHOOK] CBulletTraces::AddTrace hook desinstalado com sucesso.");
+            }
+            s_TraceHookInstalled = false;
+            s_OriginalAddBulletTrace = nullptr;
+        }
     }
 
     bool IsWeaponHooked()

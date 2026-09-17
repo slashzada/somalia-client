@@ -18,11 +18,6 @@
 
 MenuState g_MenuState;
 
-extern "C" __declspec(dllexport) void* __cdecl GetLuaSlideBridge()
-{
-    return (void*)&g_MenuState.luaSlide;
-}
-
 namespace Config
 {
     void ResetToDefaults()
@@ -35,10 +30,10 @@ namespace Config
         g_MenuState.player = PlayerConfig();
         g_MenuState.vehicle = VehicleConfig();
         g_MenuState.kfcSlide = KFCSlideConfig();
-        g_MenuState.luaSlide = LuaSlideConfig();
-        g_MenuState.fistSwitch = FistSwitchConfig();
         g_MenuState.autoPunch = AutoPunchConfig();
         g_MenuState.playerSlap = PlayerSlapConfig();
+        g_MenuState.fastSwitch = FastSwitchConfig();
+        g_MenuState.luaSlide = LuaSlideConfig();
         g_MenuState.misc = MiscConfig();
         Theme::SetAccentColor(137.f / 255.f, 207.f / 255.f, 240.f / 255.f, 1.0f);
         Logger::Log("[CONFIG] Configuracoes restauradas para os padroes (Legit e Rage independentes).");
@@ -260,22 +255,7 @@ namespace Config
         AppendFmt(out, "    \"durationMs\": %d\n", g_MenuState.kfcSlide.durationMs);
         AppendFmt(out, "  },\n");
 
-        // 7. LUA AUTO SLIDE
-        AppendFmt(out, "  \"luaSlide\": {\n");
-        AppendFmt(out, "    \"enabled\": %s,\n", g_MenuState.luaSlide.enabled ? "true" : "false");
-        AppendFmt(out, "    \"marginSniper\": %d,\n", g_MenuState.luaSlide.marginSniper);
-        AppendFmt(out, "    \"marginDeagle\": %d,\n", g_MenuState.luaSlide.marginDeagle);
-        AppendFmt(out, "    \"marginShotgun\": %d,\n", g_MenuState.luaSlide.marginShotgun);
-        AppendFmt(out, "    \"marginM4\": %d,\n", g_MenuState.luaSlide.marginM4);
-        AppendFmt(out, "    \"marginAK47\": %d\n", g_MenuState.luaSlide.marginAK47);
-        AppendFmt(out, "  },\n");
-
-        // 8. FIST SWITCH (xxxx.cs 1:1)
-        AppendFmt(out, "  \"fistSwitch\": {\n");
-        AppendFmt(out, "    \"enabled\": %s\n", g_MenuState.fistSwitch.enabled ? "true" : "false");
-        AppendFmt(out, "  },\n");
-
-        // 8.5 AUTO PUNCH (Auto Soco apos slide)
+        // 7. AUTO PUNCH (Auto Soco apos slide)
         AppendFmt(out, "  \"autoPunch\": {\n");
         AppendFmt(out, "    \"enabled\": %s,\n", g_MenuState.autoPunch.enabled ? "true" : "false");
         AppendFmt(out, "    \"delayMs\": %d,\n", g_MenuState.autoPunch.delayMs);
@@ -291,6 +271,21 @@ namespace Config
         AppendFmt(out, "    \"hotkey\": %d,\n", g_MenuState.playerSlap.hotkey);
         AppendFmt(out, "    \"chatCommands\": %s,\n", g_MenuState.playerSlap.chatCommands ? "true" : "false");
         AppendFmt(out, "    \"notifyOnExecute\": %s\n", g_MenuState.playerSlap.notifyOnExecute ? "true" : "false");
+        AppendFmt(out, "  },\n");
+
+        // 8.7 FAST SWITCH (arquive.cs)
+        AppendFmt(out, "  \"fastSwitch\": {\n");
+        AppendFmt(out, "    \"enabled\": %s\n", g_MenuState.fastSwitch.enabled ? "true" : "false");
+        AppendFmt(out, "  },\n");
+
+        // 8.8 LUA SLIDE (archiveszada.lua)
+        AppendFmt(out, "  \"luaSlide\": {\n");
+        AppendFmt(out, "    \"enabled\": %s,\n", g_MenuState.luaSlide.enabled ? "true" : "false");
+        AppendFmt(out, "    \"marginSnp\": %d,\n", g_MenuState.luaSlide.marginSnp);
+        AppendFmt(out, "    \"marginDesert\": %d,\n", g_MenuState.luaSlide.marginDesert);
+        AppendFmt(out, "    \"marginM4\": %d,\n", g_MenuState.luaSlide.marginM4);
+        AppendFmt(out, "    \"marginAK\": %d,\n", g_MenuState.luaSlide.marginAK);
+        AppendFmt(out, "    \"marginShot\": %d\n", g_MenuState.luaSlide.marginShot);
         AppendFmt(out, "  },\n");
 
         // 9. MISC
@@ -623,26 +618,7 @@ namespace Config
             tempState.kfcSlide.durationMs = ParseInt(pKFCSlide, "\"durationMs\"", tempState.kfcSlide.durationMs);
         }
 
-        // 7. Parse Lua Auto Slide
-        const char* pLuaSlide = strstr(buffer, "\"luaSlide\"");
-        if (pLuaSlide)
-        {
-            tempState.luaSlide.enabled = ParseBool(pLuaSlide, "\"enabled\"", tempState.luaSlide.enabled);
-            tempState.luaSlide.marginSniper = ParseInt(pLuaSlide, "\"marginSniper\"", tempState.luaSlide.marginSniper);
-            tempState.luaSlide.marginDeagle = ParseInt(pLuaSlide, "\"marginDeagle\"", tempState.luaSlide.marginDeagle);
-            tempState.luaSlide.marginShotgun = ParseInt(pLuaSlide, "\"marginShotgun\"", tempState.luaSlide.marginShotgun);
-            tempState.luaSlide.marginM4 = ParseInt(pLuaSlide, "\"marginM4\"", tempState.luaSlide.marginM4);
-            tempState.luaSlide.marginAK47 = ParseInt(pLuaSlide, "\"marginAK47\"", tempState.luaSlide.marginAK47);
-        }
-
-        // 8. Parse Fist Switch (xxxx.cs 1:1)
-        const char* pFistSwitch = strstr(buffer, "\"fistSwitch\"");
-        if (pFistSwitch)
-        {
-            tempState.fistSwitch.enabled = ParseBool(pFistSwitch, "\"enabled\"", tempState.fistSwitch.enabled);
-        }
-
-        // 8.5 Parse Auto Punch (Auto Soco)
+        // 7. Parse Auto Punch (Auto Soco)
         const char* pAutoPunch = strstr(buffer, "\"autoPunch\"");
         if (pAutoPunch)
         {
@@ -651,7 +627,7 @@ namespace Config
             tempState.autoPunch.cooldownMs = ParseInt(pAutoPunch, "\"cooldownMs\"", tempState.autoPunch.cooldownMs);
         }
 
-        // 8.6 Parse Player Slap (Tapa Exploit)
+        // 8. Parse Player Slap (Tapa Exploit)
         const char* pPlayerSlap = strstr(buffer, "\"playerSlap\"");
         if (pPlayerSlap)
         {
@@ -662,6 +638,25 @@ namespace Config
             tempState.playerSlap.hotkey = ParseInt(pPlayerSlap, "\"hotkey\"", tempState.playerSlap.hotkey);
             tempState.playerSlap.chatCommands = ParseBool(pPlayerSlap, "\"chatCommands\"", tempState.playerSlap.chatCommands);
             tempState.playerSlap.notifyOnExecute = ParseBool(pPlayerSlap, "\"notifyOnExecute\"", tempState.playerSlap.notifyOnExecute);
+        }
+
+        // 8.7 Parse Fast Switch
+        const char* pFastSwitch = strstr(buffer, "\"fastSwitch\"");
+        if (pFastSwitch)
+        {
+            tempState.fastSwitch.enabled = ParseBool(pFastSwitch, "\"enabled\"", tempState.fastSwitch.enabled);
+        }
+
+        // 8.8 Parse Lua Slide
+        const char* pLuaSlide = strstr(buffer, "\"luaSlide\"");
+        if (pLuaSlide)
+        {
+            tempState.luaSlide.enabled = ParseBool(pLuaSlide, "\"enabled\"", tempState.luaSlide.enabled);
+            tempState.luaSlide.marginSnp = ParseInt(pLuaSlide, "\"marginSnp\"", tempState.luaSlide.marginSnp);
+            tempState.luaSlide.marginDesert = ParseInt(pLuaSlide, "\"marginDesert\"", tempState.luaSlide.marginDesert);
+            tempState.luaSlide.marginM4 = ParseInt(pLuaSlide, "\"marginM4\"", tempState.luaSlide.marginM4);
+            tempState.luaSlide.marginAK = ParseInt(pLuaSlide, "\"marginAK\"", tempState.luaSlide.marginAK);
+            tempState.luaSlide.marginShot = ParseInt(pLuaSlide, "\"marginShot\"", tempState.luaSlide.marginShot);
         }
 
         // 9. Parse Misc
@@ -693,16 +688,6 @@ namespace Config
         if (tempState.kfcSlide.speed > 15.0f) tempState.kfcSlide.speed = 15.0f;
         if (tempState.kfcSlide.durationMs < 100) tempState.kfcSlide.durationMs = 100;
         if (tempState.kfcSlide.durationMs > 5000) tempState.kfcSlide.durationMs = 5000;
-        if (tempState.luaSlide.marginSniper < 0) tempState.luaSlide.marginSniper = 0;
-        if (tempState.luaSlide.marginSniper > 2000) tempState.luaSlide.marginSniper = 2000;
-        if (tempState.luaSlide.marginDeagle < 0) tempState.luaSlide.marginDeagle = 0;
-        if (tempState.luaSlide.marginDeagle > 2000) tempState.luaSlide.marginDeagle = 2000;
-        if (tempState.luaSlide.marginShotgun < 0) tempState.luaSlide.marginShotgun = 0;
-        if (tempState.luaSlide.marginShotgun > 2000) tempState.luaSlide.marginShotgun = 2000;
-        if (tempState.luaSlide.marginM4 < 0) tempState.luaSlide.marginM4 = 0;
-        if (tempState.luaSlide.marginM4 > 2000) tempState.luaSlide.marginM4 = 2000;
-        if (tempState.luaSlide.marginAK47 < 0) tempState.luaSlide.marginAK47 = 0;
-        if (tempState.luaSlide.marginAK47 > 2000) tempState.luaSlide.marginAK47 = 2000;
 
         for (int i = 0; i < 4; i++)
         {
@@ -1062,14 +1047,6 @@ namespace Config
         uint8_t kfcSlideSpeed;
         uint16_t kfcSlideDurationMs;
 
-        // Lua Auto Slide
-        uint8_t luaSlideBools;
-        uint16_t luaSlideMarginSniper;
-        uint16_t luaSlideMarginDeagle;
-        uint16_t luaSlideMarginShotgun;
-        uint16_t luaSlideMarginM4;
-        uint16_t luaSlideMarginAK47;
-
         // Misc
         uint8_t miscBools;
     };
@@ -1231,16 +1208,6 @@ namespace Config
         p.kfcSlideSpeed = (uint8_t)(state.kfcSlide.speed * 10.0f);
         p.kfcSlideDurationMs = (uint16_t)state.kfcSlide.durationMs;
 
-        // Lua Auto Slide
-        uint8_t luasb = 0;
-        if (state.luaSlide.enabled) luasb |= (1 << 0);
-        p.luaSlideBools = luasb;
-        p.luaSlideMarginSniper = (uint16_t)state.luaSlide.marginSniper;
-        p.luaSlideMarginDeagle = (uint16_t)state.luaSlide.marginDeagle;
-        p.luaSlideMarginShotgun = (uint16_t)state.luaSlide.marginShotgun;
-        p.luaSlideMarginM4 = (uint16_t)state.luaSlide.marginM4;
-        p.luaSlideMarginAK47 = (uint16_t)state.luaSlide.marginAK47;
-
         // Misc
         uint8_t mb = 0;
         if (state.misc.watermark) mb |= (1 << 0);
@@ -1391,15 +1358,6 @@ namespace Config
         state.kfcSlide.enabled = (kfcb & (1 << 0)) != 0;
         state.kfcSlide.speed = p.kfcSlideSpeed / 10.0f;
         state.kfcSlide.durationMs = p.kfcSlideDurationMs;
-
-        // Lua Auto Slide
-        uint8_t luasb = p.luaSlideBools;
-        state.luaSlide.enabled = (luasb & (1 << 0)) != 0;
-        state.luaSlide.marginSniper = p.luaSlideMarginSniper;
-        state.luaSlide.marginDeagle = p.luaSlideMarginDeagle;
-        state.luaSlide.marginShotgun = p.luaSlideMarginShotgun;
-        state.luaSlide.marginM4 = p.luaSlideMarginM4;
-        state.luaSlide.marginAK47 = p.luaSlideMarginAK47;
 
         // Misc
         uint8_t mb = p.miscBools;

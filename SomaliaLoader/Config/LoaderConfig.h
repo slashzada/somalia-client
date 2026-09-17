@@ -17,6 +17,9 @@ struct LoaderConfig
     std::string keyauthOwner = "5bU1fK1ki3";
     std::string keyauthSecret = "bbcdeb35fe1ba5a8898309632f14da6cbb941af50927c173baa11953f145d07c";
     std::string keyauthVersion = "1.0";
+
+    // URL de Checagem de Atualizacoes
+    std::string updateUrl = "https://raw.githubusercontent.com/slashzada/somalia-client/main/version.json";
 };
 
 namespace ConfigManager

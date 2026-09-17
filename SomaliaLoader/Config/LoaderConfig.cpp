@@ -73,6 +73,9 @@ namespace ConfigManager
         std::string sp = ReadRegString(HKEY_CURRENT_USER, "Software\\SomaliaClient", "stream_proof");
         if (!sp.empty()) s_Config.streamProof = (sp == "true" || sp == "1");
 
+        std::string uUrl = ReadRegString(HKEY_CURRENT_USER, "Software\\SomaliaClient", "update_url");
+        if (!uUrl.empty()) s_Config.updateUrl = uUrl;
+
         return true;
     }
 
@@ -104,6 +107,9 @@ namespace ConfigManager
 
             const char* spStr = cfg.streamProof ? "true" : "false";
             RegSetValueExA(hKey, "stream_proof", 0, REG_SZ, reinterpret_cast<const BYTE*>(spStr), (DWORD)strlen(spStr) + 1);
+
+            if (!cfg.updateUrl.empty())
+                RegSetValueExA(hKey, "update_url", 0, REG_SZ, reinterpret_cast<const BYTE*>(cfg.updateUrl.c_str()), (DWORD)cfg.updateUrl.length() + 1);
 
             // NUNCA salva keyauth_secret em disco ou registro. O secret fica compilado de forma segura no binario.
             RegCloseKey(hKey);

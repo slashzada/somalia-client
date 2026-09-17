@@ -38,7 +38,11 @@ if not exist "build" mkdir "build"
 cd build
 
 echo [INFO] Atualizando payload embutido do SomaliaNative...
-if exist "..\..\scripts\embed_payload.py" (
+if exist "..\..\scripts\embed_payload.ps1" (
+    powershell -ExecutionPolicy Bypass -File "..\..\scripts\embed_payload.ps1"
+) else if exist "..\scripts\embed_payload.ps1" (
+    powershell -ExecutionPolicy Bypass -File "..\scripts\embed_payload.ps1"
+) else if exist "..\..\scripts\embed_payload.py" (
     python "..\..\scripts\embed_payload.py"
 ) else if exist "..\scripts\embed_payload.py" (
     python "..\scripts\embed_payload.py"
@@ -56,11 +60,13 @@ cl /nologo /O2 /MT /std:c++20 /EHsc /W3 /utf-8 /D "WIN32" /D "_WINDOWS" /D "NDEB
    /I "..\Config" ^
    /I "..\Injector" ^
    /I "..\Payload" ^
+   /I "..\Update" ^
    ..\Main.cpp ^
    ..\Auth\KeyAuth.cpp ^
    ..\Config\LoaderConfig.cpp ^
    ..\Injector\Injector.cpp ^
    ..\Payload\SomaliaPayload.cpp ^
+   ..\Update\Updater.cpp ^
    ..\UI\LoaderMenu.cpp ^
    ..\..\SomaliaNative\Render\ImGui\imgui.cpp ^
    ..\..\SomaliaNative\Render\ImGui\imgui_draw.cpp ^

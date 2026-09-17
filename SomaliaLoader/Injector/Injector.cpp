@@ -66,6 +66,12 @@ namespace Injector
             "SomaliaNative.dll"
         };
 
+        std::string gtaPath = ConfigManager::Get().gtaPath;
+        if (!gtaPath.empty())
+        {
+            localCandidates.insert(localCandidates.begin(), gtaPath + "\\SomaliaNative.asi");
+        }
+
         for (const auto& c : localCandidates)
         {
             if (GetFileAttributesA(c.c_str()) != INVALID_FILE_ATTRIBUTES)
@@ -90,7 +96,7 @@ namespace Injector
             return "";
         }
 
-        std::string extractedDll = std::string(tempDir) + "somalia_core.dll";
+        std::string extractedDll = std::string(tempDir) + "SomaliaNative.asi";
 
         // 2.1 Verifica se o arquivo principal já existe e é válido
         HANDLE hExisting = CreateFileA(extractedDll.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
@@ -118,10 +124,12 @@ namespace Injector
             }
         }
 
-        // 2.3 Caso o arquivo principal esteja travado por processo aberto, tenta nomes alternativos em %TEMP%
+        // 2.3 Caso o arquivo principal esteja travado por processo aberto, tenta subpastas alternativas em %TEMP% mantendo SomaliaNative.asi
         for (int i = 1; i <= 20; ++i)
         {
-            std::string altDll = std::string(tempDir) + "somalia_core_" + std::to_string(i) + ".dll";
+            std::string altFolder = std::string(tempDir) + "Somalia_" + std::to_string(i);
+            CreateDirectoryA(altFolder.c_str(), NULL);
+            std::string altDll = altFolder + "\\SomaliaNative.asi";
 
             HANDLE hAlt = CreateFileA(altDll.c_str(), GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, NULL, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, NULL);
             if (hAlt != INVALID_HANDLE_VALUE)
@@ -148,7 +156,7 @@ namespace Injector
             }
         }
 
-        outError = "Falha ao extrair DLL embutida em: " + extractedDll;
+        outError = "Falha ao extrair SomaliaNative.asi embutido em: " + extractedDll;
         return "";
     }
 
@@ -163,6 +171,9 @@ namespace Injector
         char tempDir[MAX_PATH] = { 0 };
         if (GetTempPathA(MAX_PATH, tempDir))
         {
+            DeleteFileA((std::string(tempDir) + "SomaliaNative.asi").c_str());
+            DeleteFileA((std::string(tempDir) + "somalia_core.dll").c_str());
+
             std::string pattern = std::string(tempDir) + "somalia_*.dll";
             WIN32_FIND_DATAA fd;
             HANDLE hFind = FindFirstFileA(pattern.c_str(), &fd);
@@ -452,5 +463,165 @@ namespace Injector
     std::string GetStatusMessage()
     {
         return s_StatusMessage;
+    }
+
+    std::string ResolveGtaDirectory()
+    {
+        // 1. Tenta obter pelo processo ativo do gta_sa.exe
+        DWORD pid = FindProcessId("gta_sa.exe");
+        if (pid != 0)
+        {
+            HANDLE hProc = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, FALSE, pid);
+            if (hProc)
+            {
+                char imagePath[MAX_PATH] = { 0 };
+                DWORD size = MAX_PATH;
+                if (QueryFullProcessImageNameA(hProc, 0, imagePath, &size) && size > 0)
+                {
+                    CloseHandle(hProc);
+                    std::string path = imagePath;
+                    size_t slash = path.find_last_of("\\/");
+                    if (slash != std::string::npos)
+                    {
+                        return path.substr(0, slash);
+                    }
+                }
+                CloseHandle(hProc);
+            }
+        }
+
+        // 2. Tenta pelo caminho salvo na configuracao do Loader
+        std::string cfgPath = ConfigManager::Get().gtaPath;
+        if (!cfgPath.empty() && GetFileAttributesA(cfgPath.c_str()) != INVALID_FILE_ATTRIBUTES)
+        {
+            return cfgPath;
+        }
+
+        // 3. Tenta registro do Windows do SA-MP (HKEY_CURRENT_USER\Software\SAMP -> gta_sa_exe)
+        HKEY hKey;
+        if (RegOpenKeyExA(HKEY_CURRENT_USER, "Software\\SAMP", 0, KEY_READ, &hKey) == ERROR_SUCCESS)
+        {
+            char sampGtaPath[MAX_PATH] = { 0 };
+            DWORD dwType = REG_SZ;
+            DWORD dwSize = sizeof(sampGtaPath);
+            if (RegQueryValueExA(hKey, "gta_sa_exe", NULL, &dwType, (LPBYTE)sampGtaPath, &dwSize) == ERROR_SUCCESS)
+            {
+                RegCloseKey(hKey);
+                std::string sPath = sampGtaPath;
+                size_t slash = sPath.find_last_of("\\/");
+                if (slash != std::string::npos)
+                {
+                    return sPath.substr(0, slash);
+                }
+            }
+            else
+            {
+                RegCloseKey(hKey);
+            }
+        }
+
+        // 4. Tenta pasta local onde o Loader está rodando
+        char exePath[MAX_PATH] = { 0 };
+        GetModuleFileNameA(NULL, exePath, MAX_PATH);
+        std::string curDir = exePath;
+        size_t lastSlash = curDir.find_last_of("\\/");
+        if (lastSlash != std::string::npos)
+        {
+            curDir = curDir.substr(0, lastSlash);
+            if (GetFileAttributesA((curDir + "\\gta_sa.exe").c_str()) != INVALID_FILE_ATTRIBUTES ||
+                GetFileAttributesA((curDir + "\\cleo").c_str()) != INVALID_FILE_ATTRIBUTES)
+            {
+                return curDir;
+            }
+        }
+
+        return "";
+    }
+
+    void PurgeGameScripts(const std::string& gtaDirIn)
+    {
+        std::string gtaDir = gtaDirIn.empty() ? ResolveGtaDirectory() : gtaDirIn;
+        if (gtaDir.empty())
+        {
+            char localDir[MAX_PATH] = { 0 };
+            GetModuleFileNameA(NULL, localDir, MAX_PATH);
+            std::string sLocal = localDir;
+            size_t slash = sLocal.find_last_of("\\/");
+            if (slash != std::string::npos) gtaDir = sLocal.substr(0, slash);
+        }
+
+        if (gtaDir.empty()) return;
+
+        std::vector<std::string> targets = {
+            gtaDir + "\\cleo\\xxxx.cs",
+            gtaDir + "\\cleo\\arquive.cs",
+            gtaDir + "\\moonloader\\AutoSlide.lua",
+            gtaDir + "\\moonloader\\archiveszada.lua",
+            gtaDir + "\\moonloader\\config\\AutoSlideConfig.ini",
+            gtaDir + "\\AutoSlideConfig.ini"
+        };
+
+        for (const auto& target : targets)
+        {
+            if (GetFileAttributesA(target.c_str()) != INVALID_FILE_ATTRIBUTES)
+            {
+                SetFileAttributesA(target.c_str(), FILE_ATTRIBUTE_NORMAL);
+                DeleteFileA(target.c_str());
+            }
+        }
+    }
+
+    static std::atomic<bool> s_GameWatcherRunning(false);
+    static std::thread s_GameWatcherThread;
+
+    void StartGameWatcherThread()
+    {
+        if (s_GameWatcherRunning) return;
+        s_GameWatcherRunning = true;
+
+        if (s_GameWatcherThread.joinable())
+            s_GameWatcherThread.detach();
+
+        s_GameWatcherThread = std::thread([]()
+        {
+            bool wasRunning = false;
+            std::string lastGtaDir = "";
+
+            while (s_GameWatcherRunning)
+            {
+                DWORD pid = FindProcessId("gta_sa.exe");
+                bool isRunning = (pid != 0);
+
+                if (isRunning)
+                {
+                    if (!wasRunning)
+                    {
+                        lastGtaDir = ResolveGtaDirectory();
+                        wasRunning = true;
+                    }
+                }
+                else
+                {
+                    if (wasRunning)
+                    {
+                        // O jogo acabou de fechar: efetua a limpeza imediata externa
+                        std::this_thread::sleep_for(std::chrono::milliseconds(500));
+                        PurgeGameScripts(lastGtaDir);
+                        wasRunning = false;
+                    }
+                }
+
+                std::this_thread::sleep_for(std::chrono::milliseconds(500));
+            }
+        });
+    }
+
+    void StopGameWatcherThread()
+    {
+        s_GameWatcherRunning = false;
+        if (s_GameWatcherThread.joinable())
+        {
+            s_GameWatcherThread.detach();
+        }
     }
 }

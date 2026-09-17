@@ -774,19 +774,51 @@ namespace SAMP
         return s_pRakClient;
     }
 
+    struct SimpleBitStream
+    {
+        int numberOfBitsUsed;
+        int numberOfBitsAllocated;
+        int readOffset;
+        unsigned char* data;
+        bool copyData;
+        unsigned char stackData[256];
+    };
+
     bool SendRawPacket(const unsigned char* data, int length, int priority, int reliability, char orderingChannel)
     {
-        if (!s_pRakClient || !s_OriginalSendData || !data || length <= 0)
+        if (!s_pRakClient || !data || length <= 0)
             return false;
 
-        __try
+        if (s_OriginalSendBitStream)
         {
-            return s_OriginalSendData(s_pRakClient, reinterpret_cast<const char*>(data), length, priority, reliability, orderingChannel);
+            __try
+            {
+                SimpleBitStream bs = {};
+                bs.numberOfBitsUsed = length * 8;
+                bs.numberOfBitsAllocated = length * 8;
+                bs.readOffset = 0;
+                bs.data = const_cast<unsigned char*>(data);
+                bs.copyData = false;
+                return s_OriginalSendBitStream(s_pRakClient, &bs, priority, reliability, orderingChannel);
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER)
+            {
+            }
         }
-        __except (EXCEPTION_EXECUTE_HANDLER)
+
+        if (s_OriginalSendData)
         {
-            return false;
+            __try
+            {
+                return s_OriginalSendData(s_pRakClient, reinterpret_cast<const char*>(data), length, priority, reliability, orderingChannel);
+            }
+            __except (EXCEPTION_EXECUTE_HANDLER)
+            {
+                return false;
+            }
         }
+
+        return false;
     }
 
     static bool __fastcall Hooked_SendBitStream(void* pThis, void* edx, void* pBitStream, int priority, int reliability, char orderingChannel)

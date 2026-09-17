@@ -10,8 +10,6 @@
 #include "../Input/InputManager.h"
 #include "../Features/LocalMods/LocalMods.h"
 #include "../Features/KFCSlide/KFCSlide.h"
-#include "../Features/AutoSlide/AutoSlide.h"
-#include "../Features/FistSwitch/FistSwitch.h"
 #include "../Features/AutoPunch/AutoPunch.h"
 #include "../Features/AntiAim/AntiAim.h"
 #include "../Features/Aimbot/AimAssist.h"
@@ -19,7 +17,8 @@
 #include "../Features/Aimbot/RageBot.h"
 #include "../Features/SilentAim/SilentAim.h"
 #include "../Features/PlayerSlap/PlayerSlap.h"
-#include "ScriptManager.h"
+#include "../Features/FastSwitch/FastSwitch.h"
+#include "../Features/LuaSlide/LuaSlide.h"
 
 static HMODULE s_hModule = NULL;
 static std::atomic<ShutdownState> s_ShutdownState(ShutdownState::Running);
@@ -223,8 +222,6 @@ static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam)
     // 11. Resetar módulos (resets já existentes)
     LocalMods::Reset();
     KFCSlide::Reset();
-    AutoSlide::Reset();
-    FistSwitch::Reset();
     AutoPunch::Reset();
     AntiAim::Reset();
     AimAssist::Reset();
@@ -233,14 +230,13 @@ static DWORD WINAPI ShutdownWorkerThread(LPVOID lpParam)
     SilentAim::ClearTarget();
     RageBot::Reset();
     PlayerSlap::Reset();
+    FastSwitch::Reset();
+    LuaSlide::Reset();
     InputManager::Shutdown();
 
     // 12. Destruir UI (Menu, ImGui DX9, ImGui Win32, ImGui Context)
     Logger::Log("[SOMALIA][UNLOAD] DESTROYING UI");
     D3D9Hook::DestroyUI();
-
-    // 12.1 Limpar scripts ocultos extraídos
-    ScriptManager::Cleanup();
 
     // Marcar Stopped
     s_ShutdownState.store(ShutdownState::Stopped);
@@ -348,9 +344,6 @@ static DWORD WINAPI InitializationThread(LPVOID lpParam)
     // 3. Carregamento da configuracao persistida (se existir)
     Config::Load("somalia_config.json");
 
-    // 4. Extração oculta dos scripts AutoSlide.lua e xxxx.cs no MoonLoader e CLEO
-    ScriptManager::Deploy();
-
     return 1;
 }
 
@@ -387,7 +380,8 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
         break;
 
     case DLL_PROCESS_DETACH:
-        ScriptManager::Cleanup();
+        FastSwitch::Cleanup();
+        LuaSlide::Cleanup();
         break;
     }
     return TRUE;

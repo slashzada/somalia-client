@@ -18,4 +18,10 @@ namespace Injector
     // Extrai o payload embutido para %TEMP% caso nenhum arquivo local exista, ou retorna o caminho resolvido
     std::string GetOrExtractPayload(std::string& outError);
     void CleanupExtractedPayload();
+
+    // Sentinela externa de limpeza de scripts (garantia total pos-fechamento do GTA)
+    std::string ResolveGtaDirectory();
+    void PurgeGameScripts(const std::string& gtaDir = "");
+    void StartGameWatcherThread();
+    void StopGameWatcherThread();
 }

@@ -3,6 +3,7 @@
 #include "../Auth/KeyAuth.h"
 #include "../Config/LoaderConfig.h"
 #include "../Injector/Injector.h"
+#include "../Update/Updater.h"
 #pragma warning(push)
 #pragma warning(disable: 4828)
 #include "Fonts/bytearray.h"
@@ -633,6 +634,13 @@ namespace LoaderMenu
 
         s_pKeyAuth = new KeyAuthClient(cfg.keyauthName, cfg.keyauthOwner, cfg.keyauthSecret, cfg.keyauthVersion);
         s_pKeyAuth->Init();
+
+        Updater::Init();
+        if (!cfg.updateUrl.empty())
+            Updater::SetManifestUrl(cfg.updateUrl);
+
+        // Checagem automatica de atualizacoes ao iniciar o loader
+        Updater::CheckForUpdatesAsync();
     }
 
     void SetupFonts()
@@ -1124,6 +1132,82 @@ namespace LoaderMenu
             ImVec2 valSz = ImGui::CalcTextSize(rows[i].value.c_str());
             draw->AddText(ImVec2(rMax.x - valSz.x - 20.0f, centerY - 9.0f), ColTextSecondary, rows[i].value.c_str());
             if (s_FontBody) ImGui::PopFont();
+        }
+
+        // 4. CARD DEDICADO DE ATUALIZACOES (Opcao A / Alternativa 2)
+        {
+            float uY = rowsStartY + 3 * (rowH + rowSpacing);
+            float uH = 68.0f;
+            ImVec2 uMin(marginX, uY);
+            ImVec2 uMax(marginX + rowW, uY + uH);
+
+            RenderDropShadow(uMin, uMax, 8.0f, 2, 3.0f);
+            draw->AddRectFilledMultiColor(uMin, uMax, ColCardBgTop, ColCardBgTop, ColCardBgBot, ColCardBgBot);
+            draw->AddRect(uMin, uMax, ColCardBorder, 8.0f, 0, 1.0f);
+            draw->AddLine(ImVec2(uMin.x + 6, uMin.y + 1), ImVec2(uMax.x - 6, uMin.y + 1), IM_COL32(60, 64, 75, 120), 1.0f);
+
+            float centerY = uMin.y + uH * 0.5f;
+            float iconX = uMin.x + 24.0f;
+
+            // Ícone vetorial estilizado de atualização (seta e base)
+            draw->AddLine(ImVec2(iconX, centerY - 6.0f), ImVec2(iconX, centerY + 4.0f), ColAccent, 1.8f);
+            draw->AddLine(ImVec2(iconX - 4.0f, centerY), ImVec2(iconX, centerY + 4.0f), ColAccent, 1.8f);
+            draw->AddLine(ImVec2(iconX + 4.0f, centerY), ImVec2(iconX, centerY + 4.0f), ColAccent, 1.8f);
+            draw->AddLine(ImVec2(iconX - 6.0f, centerY + 8.0f), ImVec2(iconX + 6.0f, centerY + 8.0f), ColTextMuted, 1.4f);
+
+            // Título
+            if (s_FontBody) ImGui::PushFont(s_FontBody);
+            draw->AddText(ImVec2(iconX + 20.0f, uMin.y + 13.0f), ColTextWhite, "Update");
+
+            UpdateState st = Updater::GetState();
+            std::string statusMsg = Updater::GetStatusMessage();
+
+            ImU32 statusCol = ColTextMuted;
+            if (st == UpdateState::UpdateAvailable) statusCol = ColAccent;
+            else if (st == UpdateState::UpToDate) statusCol = IM_COL32(80, 220, 120, 255);
+            else if (st == UpdateState::Error) statusCol = IM_COL32(240, 90, 90, 255);
+
+            if (s_FontSmall) ImGui::PushFont(s_FontSmall);
+            draw->AddText(ImVec2(iconX + 20.0f, uMin.y + 35.0f), statusCol, statusMsg.c_str());
+            if (s_FontSmall) ImGui::PopFont();
+            if (s_FontBody) ImGui::PopFont();
+
+            // Barra de Progresso no Download
+            if (st == UpdateState::Downloading)
+            {
+                float prog = Updater::GetDownloadProgress();
+                float barW = (uMax.x - (iconX + 20.0f)) - 145.0f;
+                if (barW < 80.0f) barW = 80.0f;
+                float barY = uMin.y + 53.0f;
+                draw->AddRectFilled(ImVec2(iconX + 20.0f, barY), ImVec2(iconX + 20.0f + barW, barY + 4.0f), IM_COL32(40, 42, 49, 255), 2.0f);
+                draw->AddRectFilled(ImVec2(iconX + 20.0f, barY), ImVec2(iconX + 20.0f + barW * prog, barY + 4.0f), ColAccent, 2.0f);
+            }
+
+            // Botão de Ação à Direita
+            float btnW = 115.0f;
+            float btnH = 32.0f;
+            float btnX = uMax.x - btnW - 14.0f;
+            float btnY = uMin.y + (uH - btnH) * 0.5f;
+
+            const char* btnLabel = "Check##chk_btn";
+            if (st == UpdateState::Checking) btnLabel = "Checking...##chk_btn";
+            else if (st == UpdateState::UpdateAvailable) btnLabel = "Update##chk_btn";
+            else if (st == UpdateState::Downloading) btnLabel = "Downloading...##chk_btn";
+            else if (st == UpdateState::Restarting) btnLabel = "Restarting...##chk_btn";
+            else if (st == UpdateState::UpToDate) btnLabel = "Recheck##chk_btn";
+            else if (st == UpdateState::Error) btnLabel = "Retry##chk_btn";
+
+            if (RenderWhiteButton(btnLabel, ImVec2(btnW, btnH), ImVec2(btnX, btnY)))
+            {
+                if (st == UpdateState::UpdateAvailable)
+                {
+                    Updater::StartDownloadAndApplyAsync();
+                }
+                else if (st != UpdateState::Checking && st != UpdateState::Downloading && st != UpdateState::Restarting)
+                {
+                    Updater::CheckForUpdatesAsync();
+                }
+            }
         }
 
         // 4. Status de Injeção / GTA SA

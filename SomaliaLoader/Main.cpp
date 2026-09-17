@@ -5,6 +5,7 @@
 #include "../SomaliaNative/Render/ImGui/imgui_impl_dx9.h"
 #include "../SomaliaNative/Render/ImGui/imgui_impl_win32.h"
 #include "UI/LoaderMenu.h"
+#include "Injector/Injector.h"
 
 #pragma comment(lib, "d3d9.lib")
 #pragma comment(lib, "dwmapi.lib")
@@ -21,67 +22,85 @@ extern IMGUI_IMPL_API LRESULT ImGui_ImplWin32_WndProcHandler(HWND hWnd, UINT msg
 
 static LPDIRECT3D9              g_pD3D = NULL;
 static LPDIRECT3DDEVICE9        g_pd3dDevice = NULL;
+static IDirect3D9Ex*            g_pD3DEx = NULL;
+static IDirect3DDevice9Ex*      g_pd3dDeviceEx = NULL;
 static D3DPRESENT_PARAMETERS    g_d3dpp = {};
 
 bool CreateDeviceD3D(HWND hWnd)
 {
-    if ((g_pD3D = Direct3DCreate9(D3D_SDK_VERSION)) == NULL)
-        return false;
-
-    D3DFORMAT formats[] = { D3DFMT_A8R8G8B8, D3DFMT_UNKNOWN, D3DFMT_X8R8G8B8, D3DFMT_R5G6B5 };
-    DWORD vpTypes[] = { D3DCREATE_HARDWARE_VERTEXPROCESSING, D3DCREATE_SOFTWARE_VERTEXPROCESSING, D3DCREATE_MIXED_VERTEXPROCESSING };
-
-    RECT rc;
-    GetClientRect(hWnd, &rc);
-    UINT width = (rc.right - rc.left > 0) ? (rc.right - rc.left) : 580;
-    UINT height = (rc.bottom - rc.top > 0) ? (rc.bottom - rc.top) : 500;
-
-    for (D3DFORMAT fmt : formats)
+    // Try Direct3DCreate9Ex first (recommended for Windows 10/11 modern WDDM drivers)
+    typedef HRESULT (WINAPI *LPDIRECT3DCREATE9EX)(UINT SDKVersion, IDirect3D9Ex**);
+    HMODULE hD3D9 = LoadLibraryA("d3d9.dll");
+    if (hD3D9)
     {
-        for (DWORD vp : vpTypes)
+        LPDIRECT3DCREATE9EX pDirect3DCreate9Ex = (LPDIRECT3DCREATE9EX)GetProcAddress(hD3D9, "Direct3DCreate9Ex");
+        if (pDirect3DCreate9Ex && SUCCEEDED(pDirect3DCreate9Ex(D3D_SDK_VERSION, &g_pD3DEx)))
         {
             ZeroMemory(&g_d3dpp, sizeof(g_d3dpp));
             g_d3dpp.Windowed = TRUE;
             g_d3dpp.SwapEffect = D3DSWAPEFFECT_DISCARD;
-            g_d3dpp.BackBufferFormat = fmt;
-            g_d3dpp.BackBufferWidth = width;
-            g_d3dpp.BackBufferHeight = height;
+            g_d3dpp.BackBufferFormat = D3DFMT_UNKNOWN;
             g_d3dpp.EnableAutoDepthStencil = FALSE;
             g_d3dpp.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE;
             g_d3dpp.hDeviceWindow = hWnd;
 
-            HRESULT hr = g_pD3D->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hWnd, vp, &g_d3dpp, &g_pd3dDevice);
-            if (SUCCEEDED(hr))
+            if (SUCCEEDED(g_pD3DEx->CreateDeviceEx(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hWnd,
+                D3DCREATE_HARDWARE_VERTEXPROCESSING, &g_d3dpp, NULL, &g_pd3dDeviceEx)))
+            {
+                g_pd3dDevice = g_pd3dDeviceEx;
                 return true;
+            }
+
+            if (SUCCEEDED(g_pD3DEx->CreateDeviceEx(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hWnd,
+                D3DCREATE_SOFTWARE_VERTEXPROCESSING, &g_d3dpp, NULL, &g_pd3dDeviceEx)))
+            {
+                g_pd3dDevice = g_pd3dDeviceEx;
+                return true;
+            }
         }
     }
 
-    // Fallback de segurança com dimensões zeradas
-    ZeroMemory(&g_d3dpp, sizeof(g_d3dpp));
-    g_d3dpp.Windowed = TRUE;
-    g_d3dpp.SwapEffect = D3DSWAPEFFECT_DISCARD;
-    g_d3dpp.BackBufferFormat = D3DFMT_UNKNOWN;
-    g_d3dpp.EnableAutoDepthStencil = FALSE;
-    g_d3dpp.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE;
-    g_d3dpp.hDeviceWindow = hWnd;
+    // Fallback to legacy Direct3DCreate9
+    if ((g_pD3D = Direct3DCreate9(D3D_SDK_VERSION)) != NULL)
+    {
+        ZeroMemory(&g_d3dpp, sizeof(g_d3dpp));
+        g_d3dpp.Windowed = TRUE;
+        g_d3dpp.SwapEffect = D3DSWAPEFFECT_DISCARD;
+        g_d3dpp.BackBufferFormat = D3DFMT_UNKNOWN;
+        g_d3dpp.EnableAutoDepthStencil = FALSE;
+        g_d3dpp.PresentationInterval = D3DPRESENT_INTERVAL_IMMEDIATE;
+        g_d3dpp.hDeviceWindow = hWnd;
 
-    HRESULT hr = g_pD3D->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hWnd, D3DCREATE_SOFTWARE_VERTEXPROCESSING, &g_d3dpp, &g_pd3dDevice);
-    if (SUCCEEDED(hr))
-        return true;
+        if (SUCCEEDED(g_pD3D->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hWnd,
+            D3DCREATE_HARDWARE_VERTEXPROCESSING, &g_d3dpp, &g_pd3dDevice)))
+            return true;
+
+        if (SUCCEEDED(g_pD3D->CreateDevice(D3DADAPTER_DEFAULT, D3DDEVTYPE_HAL, hWnd,
+            D3DCREATE_SOFTWARE_VERTEXPROCESSING, &g_d3dpp, &g_pd3dDevice)))
+            return true;
+    }
 
     return false;
 }
 
 void CleanupDeviceD3D()
 {
-    if (g_pd3dDevice) { g_pd3dDevice->Release(); g_pd3dDevice = NULL; }
+    if (g_pd3dDeviceEx) { g_pd3dDeviceEx->Release(); g_pd3dDeviceEx = NULL; g_pd3dDevice = NULL; }
+    else if (g_pd3dDevice) { g_pd3dDevice->Release(); g_pd3dDevice = NULL; }
+
+    if (g_pD3DEx) { g_pD3DEx->Release(); g_pD3DEx = NULL; }
     if (g_pD3D) { g_pD3D->Release(); g_pD3D = NULL; }
 }
 
 void ResetDevice()
 {
     ImGui_ImplDX9_InvalidateDeviceObjects();
-    HRESULT hr = g_pd3dDevice->Reset(&g_d3dpp);
+    HRESULT hr = E_FAIL;
+    if (g_pd3dDeviceEx)
+        hr = g_pd3dDeviceEx->ResetEx(&g_d3dpp, NULL);
+    else if (g_pd3dDevice)
+        hr = g_pd3dDevice->Reset(&g_d3dpp);
+
     if (SUCCEEDED(hr))
     {
         ImGui_ImplDX9_CreateDeviceObjects();
@@ -225,26 +244,6 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
             continue;
         }
 
-        // Se a janela estiver minimizada, cede a CPU/GPU e evita concorrência
-        if (IsIconic(hWnd))
-        {
-            Sleep(25);
-            continue;
-        }
-
-        // Trata perda de dispositivo antes da renderização para não colidir com o contexto D3D9 do GTA
-        HRESULT hrCoop = g_pd3dDevice->TestCooperativeLevel();
-        if (hrCoop == D3DERR_DEVICELOST)
-        {
-            // O contexto de vídeo pertence a outro aplicativo exclusivo (ex: GTA SA em tela cheia)
-            Sleep(25);
-            continue;
-        }
-        else if (hrCoop == D3DERR_DEVICENOTRESET)
-        {
-            ResetDevice();
-        }
-
         ImGui_ImplDX9_NewFrame();
         ImGui_ImplWin32_NewFrame();
         ImGui::NewFrame();
@@ -275,11 +274,8 @@ int WINAPI WinMain(HINSTANCE hInstance, HINSTANCE hPrevInstance, LPSTR lpCmdLine
         }
 
         HRESULT result = g_pd3dDevice->Present(NULL, NULL, NULL, NULL);
-        if (result == D3DERR_DEVICELOST)
-        {
-            if (g_pd3dDevice->TestCooperativeLevel() == D3DERR_DEVICENOTRESET)
-                ResetDevice();
-        }
+        if (result == D3DERR_DEVICELOST && g_pd3dDevice->TestCooperativeLevel() == D3DERR_DEVICENOTRESET)
+            ResetDevice();
 
         static int s_ScreenshotFrame = 0;
         if (strstr(lpCmdLine, "--screenshot"))

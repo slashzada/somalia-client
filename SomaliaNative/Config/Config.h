@@ -267,25 +267,6 @@ struct KFCSlideConfig
     int durationMs = 800;     // Janela fixa de 0.8 segundos pos-mira (800ms)
 };
 
-#pragma pack(push, 1)
-struct LuaSlideConfig
-{
-    uint32_t magic = 0x534F4D41; // Assinatura "SOMA" para autenticacao do script Lua
-    bool enabled = false;
-    uint8_t _pad[3] = {0, 0, 0};
-    int marginSniper = 550;
-    int marginDeagle = 0;
-    int marginShotgun = 0;
-    int marginM4 = 0;
-    int marginAK47 = 0;
-};
-#pragma pack(pop)
-
-struct FistSwitchConfig
-{
-    bool enabled = false;
-};
-
 struct AutoPunchConfig
 {
     bool enabled = false;
@@ -302,6 +283,21 @@ struct PlayerSlapConfig
     int hotkey = 0;            // VK keycode (0 = none)
     bool chatCommands = true;  // Intercepta /tapa, /slap, /derrubar
     bool notifyOnExecute = true;
+};
+
+struct FastSwitchConfig
+{
+    bool enabled = false;
+};
+
+struct LuaSlideConfig
+{
+    bool enabled = false;
+    int marginSnp = 550;
+    int marginDesert = 0;
+    int marginM4 = 0;
+    int marginAK = 0;
+    int marginShot = 0;
 };
 
 struct MiscConfig
@@ -329,10 +325,10 @@ struct MenuState
     PlayerConfig     player;
     VehicleConfig    vehicle;
     KFCSlideConfig   kfcSlide;
-    LuaSlideConfig   luaSlide;
-    FistSwitchConfig fistSwitch;
     AutoPunchConfig  autoPunch;
     PlayerSlapConfig playerSlap;
+    FastSwitchConfig fastSwitch;
+    LuaSlideConfig   luaSlide;
     MiscConfig       misc;
 
     // Backward compatibility aliases (LegitBot)
@@ -372,10 +368,10 @@ struct MenuState
         , player(other.player)
         , vehicle(other.vehicle)
         , kfcSlide(other.kfcSlide)
-        , luaSlide(other.luaSlide)
-        , fistSwitch(other.fistSwitch)
         , autoPunch(other.autoPunch)
         , playerSlap(other.playerSlap)
+        , fastSwitch(other.fastSwitch)
+        , luaSlide(other.luaSlide)
         , misc(other.misc)
     {
     }
@@ -396,10 +392,10 @@ struct MenuState
             player = other.player;
             vehicle = other.vehicle;
             kfcSlide = other.kfcSlide;
-            luaSlide = other.luaSlide;
-            fistSwitch = other.fistSwitch;
             autoPunch = other.autoPunch;
             playerSlap = other.playerSlap;
+            fastSwitch = other.fastSwitch;
+            luaSlide = other.luaSlide;
             misc = other.misc;
         }
         return *this;
@@ -407,7 +403,6 @@ struct MenuState
 };
 
 extern MenuState g_MenuState;
-extern "C" __declspec(dllexport) void* __cdecl GetLuaSlideBridge();
 
 namespace Config
 {

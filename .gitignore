@@ -58,18 +58,3 @@ $RECYCLE.BIN/
 # Config local (secrets)
 .env
 *.local.json
-
-# Temporary / Reference / Dump files
-somalia showcase eyes + silent + slap/
-loader_*.png
-loader_*.bmp
-Novo Documento de Texto.txt
-scratch_*
-gemini-code-*
-slapxx.cs
-xxxx.cs
-AutoSlide.lua
-cheat_samp_dump.cpp
-rakclient_dump.h
-s0beit_samp_dump.cpp
-

@@ -9,6 +9,8 @@
 #include "../Core/Main.h"
 #include "../Features/AntiAim/AntiAim.h"
 #include "../Features/PlayerSlap/PlayerSlap.h"
+#include "../Features/FastSwitch/FastSwitch.h"
+#include "../Features/LuaSlide/LuaSlide.h"
 #include "../Core/RuntimeState.h"
 #include <vector>
 #include <stdlib.h>
@@ -691,7 +693,7 @@ namespace Menu
 
         // 3. Anti-Aim & Network Angles (Superior Direito - H=375)
         ImGui::SetCursorPos(ImVec2(505, 38));
-        ImGui::MenuChild("Anti-Aim & Network Angles", ImVec2(320, 375), false, ImGuiWindowFlags_NoScrollWithMouse);
+        ImGui::MenuChild("Anti-Aim & Network Angles", ImVec2(320, 365), false, ImGuiWindowFlags_NoScrollWithMouse);
         {
             const char* pitchList[] = { "Disabled", "Emotion (-89°)", "Up (89°)", "Zero (0°)" };
             const char* yawList[]   = { "Disabled", "Backward (180°)", "Spinbot", "Jitter", "Random" };
@@ -712,18 +714,20 @@ namespace Menu
         }
         ImGui::EndChild();
 
-        // 4. Player Slap CLEO (/tapa) (Inferior Direito - Y=425, H=95)
-        ImGui::SetCursorPos(ImVec2(505, 425));
-        ImGui::MenuChild("Player Slap (Tapa CLEO)", ImVec2(320, 95));
+        // 4. CLEO Exploits & Scripts (Inferior Direito - Y=415, H=105)
+        ImGui::SetCursorPos(ImVec2(505, 415));
+        ImGui::MenuChild("CLEO Exploits (slapxx & arquive)", ImVec2(320, 105));
         {
             ImGui::Spacing();
-            if (ImGui::Checkbox("Ativar Player Slap (/tapa)", &g_MenuState.playerSlap.enabled))
+            if (ImGui::Checkbox("Player Slap (/tapa)", &g_MenuState.playerSlap.enabled))
             {
                 if (g_MenuState.playerSlap.enabled)
                     PlayerSlap::ShowToast("[PlayerSlap] ATIVADO (ON)", 0xFF00FF88, 3000);
                 else
                     PlayerSlap::ShowToast("[PlayerSlap] DESATIVADO (OFF)", 0xFFFF4444, 3000);
             }
+            ImGui::Spacing();
+            ImGui::Checkbox("Fast Switch", &g_MenuState.fastSwitch.enabled);
         }
         ImGui::EndChild();
     }
@@ -868,99 +872,58 @@ namespace Menu
     }
 
     // ─────────────────────────────────────────────────────────────
-    // ABA 8: SLIDE & KFC
+    // ABA 8: SLIDE & COMBAT MOVEMENT
     // ─────────────────────────────────────────────────────────────
     static void RenderSlideTab()
     {
-        // Coluna 1: Auto Slide Nativo (C++)
+        // Coluna 1 Topo: KFC Slide
         ImGui::SetCursorPos(ImVec2(169, 38));
-        ImGui::MenuChild("Auto C-Slide", ImVec2(320, 482));
+        ImGui::MenuChild("KFC Slide", ImVec2(320, 150));
         {
             ImGui::Spacing();
-            if (ImGui::Checkbox("Ativar Auto C-Slide", &g_MenuState.luaSlide.enabled))
+            if (ImGui::Checkbox("Ativar KFC Slide", &g_MenuState.kfcSlide.enabled))
             {
-                if (g_MenuState.luaSlide.enabled)
-                    PlayerSlap::ShowToast("[AutoSlide] Ativado (ON)", 0xFF00FF88, 3000);
+                if (g_MenuState.kfcSlide.enabled)
+                    PlayerSlap::ShowToast("[KFC Slide] ATIVADO (ON)", 0xFF00FF88, 3000);
                 else
-                    PlayerSlap::ShowToast("[AutoSlide] Desativado (OFF)", 0xFFFF4444, 3000);
+                    PlayerSlap::ShowToast("[KFC Slide] DESATIVADO (OFF)", 0xFFFF4444, 3000);
             }
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
-
-            ImGui::TextColored(Theme::AccentColor, "Margens por Arma (Delay Duck)");
-            ImGui::Spacing();
-
-            if (ImGui::SliderInt("Sniper Rifle##slide", &g_MenuState.luaSlide.marginSniper, 0, 1000, "%d ms"))
+            if (g_MenuState.kfcSlide.enabled)
             {
-                char buf[128];
-                snprintf(buf, sizeof(buf), "[AutoSlide] Sniper: %d ms", g_MenuState.luaSlide.marginSniper);
-                PlayerSlap::ShowToast(buf, 0xFF00DDFF, 1800);
-            }
-            if (ImGui::SliderInt("Desert Eagle##slide", &g_MenuState.luaSlide.marginDeagle, 0, 1000, "%d ms"))
-            {
-                char buf[128];
-                snprintf(buf, sizeof(buf), "[AutoSlide] Deagle: %d ms", g_MenuState.luaSlide.marginDeagle);
-                PlayerSlap::ShowToast(buf, 0xFF00DDFF, 1800);
-            }
-            if (ImGui::SliderInt("Shotgun##slide", &g_MenuState.luaSlide.marginShotgun, 0, 1000, "%d ms"))
-            {
-                char buf[128];
-                snprintf(buf, sizeof(buf), "[AutoSlide] Shotgun: %d ms", g_MenuState.luaSlide.marginShotgun);
-                PlayerSlap::ShowToast(buf, 0xFF00DDFF, 1800);
-            }
-            if (ImGui::SliderInt("M4 Assault##slide", &g_MenuState.luaSlide.marginM4, 0, 1000, "%d ms"))
-            {
-                char buf[128];
-                snprintf(buf, sizeof(buf), "[AutoSlide] M4: %d ms", g_MenuState.luaSlide.marginM4);
-                PlayerSlap::ShowToast(buf, 0xFF00DDFF, 1800);
-            }
-            if (ImGui::SliderInt("AK-47##slide", &g_MenuState.luaSlide.marginAK47, 0, 1000, "%d ms"))
-            {
-                char buf[128];
-                snprintf(buf, sizeof(buf), "[AutoSlide] AK-47: %d ms", g_MenuState.luaSlide.marginAK47);
-                PlayerSlap::ShowToast(buf, 0xFF00DDFF, 1800);
+                ImGui::Spacing();
+                ImGui::SliderFloat("Velocidade", &g_MenuState.kfcSlide.speed, 1.0f, 10.0f, "%.1fx");
             }
         }
         ImGui::EndChild();
 
-        // Coluna 2: KFC Slide & Fast Fist Switch
-        ImGui::SetCursorPos(ImVec2(505, 38));
-        ImGui::MenuChild("KFC Slide & Fist Switch", ImVec2(320, 482));
+        // Coluna 1 Base: Auto Slide
+        ImGui::SetCursorPos(ImVec2(169, 200));
+        ImGui::MenuChild("Auto Slide", ImVec2(320, 320));
         {
             ImGui::Spacing();
-            if (ImGui::Checkbox("Master Enable KFC Slide", &g_MenuState.kfcSlide.enabled))
+            ImGui::Checkbox("Ativar Auto Slide", &g_MenuState.luaSlide.enabled);
+            if (g_MenuState.luaSlide.enabled)
             {
-                if (g_MenuState.kfcSlide.enabled)
-                    PlayerSlap::ShowToast("[KFC Slide] Ativado (ON)", 0xFF00FF88, 3000);
-                else
-                    PlayerSlap::ShowToast("[KFC Slide] Desativado (OFF)", 0xFFFF4444, 3000);
-            }
-            ImGui::Spacing();
-            if (ImGui::SliderFloat("Velocidade (Speed)", &g_MenuState.kfcSlide.speed, 1.0f, 10.0f, "%.1fx"))
-            {
-                char buf[128];
-                snprintf(buf, sizeof(buf), "[KFC Slide] Velocidade: %.1fx", g_MenuState.kfcSlide.speed);
-                PlayerSlap::ShowToast(buf, 0xFF00DDFF, 1800);
-            }
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
+                ImGui::Spacing();
+                ImGui::Separator();
+                ImGui::Spacing();
 
-            // Modulo Independente Fist Switch
-            if (ImGui::Checkbox("Ativar Auto Soco no Corte de Mira (Fist Switch)", &g_MenuState.fistSwitch.enabled))
-            {
-                if (g_MenuState.fistSwitch.enabled)
-                    PlayerSlap::ShowToast("[FistSwitch] Auto Soco ATIVADO (ON)", 0xFF00FF88, 3000);
-                else
-                    PlayerSlap::ShowToast("[FistSwitch] Auto Soco DESATIVADO (OFF)", 0xFFFF4444, 3000);
+                ImGui::TextColored(Theme::AccentColor, "Delays por Arma:");
+                ImGui::SliderInt("Sniper##luaSnp", &g_MenuState.luaSlide.marginSnp, 0, 1000, "%d ms");
+                ImGui::SliderInt("Desert Eagle##luaDeag", &g_MenuState.luaSlide.marginDesert, 0, 1000, "%d ms");
+                ImGui::SliderInt("M4##luaM4", &g_MenuState.luaSlide.marginM4, 0, 1000, "%d ms");
+                ImGui::SliderInt("AK-47##luaAK", &g_MenuState.luaSlide.marginAK, 0, 1000, "%d ms");
+                ImGui::SliderInt("Shotgun##luaShot", &g_MenuState.luaSlide.marginShot, 0, 1000, "%d ms");
             }
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Spacing();
+        }
+        ImGui::EndChild();
 
-            // Auto Punch
-            if (ImGui::Checkbox("Ativar Auto Soco apos Slide + Soco", &g_MenuState.autoPunch.enabled))
+        // Coluna 2 Topo: Auto Punch
+        ImGui::SetCursorPos(ImVec2(505, 38));
+        ImGui::MenuChild("Auto Punch", ImVec2(320, 200));
+        {
+            ImGui::Spacing();
+            if (ImGui::Checkbox("Ativar Auto Punch", &g_MenuState.autoPunch.enabled))
             {
                 if (g_MenuState.autoPunch.enabled)
                     PlayerSlap::ShowToast("[AutoPunch] ATIVADO (ON)", 0xFF00FF88, 3000);
@@ -973,6 +936,15 @@ namespace Menu
                 ImGui::SliderInt("Delay do Soco", &g_MenuState.autoPunch.delayMs, 20, 300, "%d ms");
                 ImGui::SliderInt("Cooldown do Soco", &g_MenuState.autoPunch.cooldownMs, 100, 800, "%d ms");
             }
+        }
+        ImGui::EndChild();
+
+        // Coluna 2 Base: Fast Switch
+        ImGui::SetCursorPos(ImVec2(505, 250));
+        ImGui::MenuChild("Fast Switch", ImVec2(320, 270));
+        {
+            ImGui::Spacing();
+            ImGui::Checkbox("Ativar Fast Switch", &g_MenuState.fastSwitch.enabled);
         }
         ImGui::EndChild();
     }

@@ -19,12 +19,12 @@
 #include "../Features/SilentAim/SilentAim.h"
 #include "../Features/LocalMods/LocalMods.h"
 #include "../Features/KFCSlide/KFCSlide.h"
-#include "../Features/AutoSlide/AutoSlide.h"
-#include "../Features/FistSwitch/FistSwitch.h"
 #include "../Features/AutoPunch/AutoPunch.h"
 #include "../Features/AntiAim/AntiAim.h"
 #include "../Features/Aimbot/TriggerBot.h"
 #include "../Features/PlayerSlap/PlayerSlap.h"
+#include "../Features/FastSwitch/FastSwitch.h"
+#include "../Features/LuaSlide/LuaSlide.h"
 
 namespace D3D9Hook
 {
@@ -110,13 +110,13 @@ namespace D3D9Hook
 
             // 5.5 Inicializa os modulos nativos de gameplay
             KFCSlide::Initialize();
-            AutoSlide::Initialize();
-            FistSwitch::Initialize();
             AutoPunch::Initialize();
             AntiAim::Initialize();
             TriggerBot::Initialize();
             SilentAim::Initialize();
-            Logger::Log("Modulos nativos de gameplay inicializados (KFC, AutoSlide, FistSwitch, AutoPunch, AntiAim, TriggerBot, SilentAim).");
+            FastSwitch::Initialize();
+            LuaSlide::Initialize();
+            Logger::Log("Modulos nativos de gameplay inicializados (KFC, AutoPunch, AntiAim, TriggerBot, SilentAim, FastSwitch, LuaSlide).");
 
             StreamProof::Initialize(hWnd);
             s_bStreamProofInitialized = true;
@@ -168,13 +168,7 @@ namespace D3D9Hook
         // 5. Processa KFC Slide
         KFCSlide::Update();
 
-        // 5.1 Processa Auto Slide Nativo (C-Slide original por margem de arma)
-        AutoSlide::Update();
-
-        // 5.2 Processa Fist Switch (xxxx.cs 1:1)
-        FistSwitch::Update();
-
-        // 5.25 Processa Auto Punch (Auto Soco apos slide + troca para soco)
+        // 5.1 Processa Auto Punch (Auto Soco apos slide + troca para soco)
         AutoPunch::Update();
 
         // 5.3 Processa Anti-Aim e Fake Lag
@@ -186,6 +180,10 @@ namespace D3D9Hook
         // 5.4 Processa Player Slap Exploit (Hotkeys e Notificacoes)
         PlayerSlap::Update();
         PlayerSlap::RenderNotifications();
+
+        // 5.5 Processa Fast Switch (arquive.cs) e Lua AutoSlide (archiveszada.lua)
+        FastSwitch::Update();
+        LuaSlide::Update();
 
         // 6. Renderiza a interface Somalia (quando aberta)
         Menu::Render();

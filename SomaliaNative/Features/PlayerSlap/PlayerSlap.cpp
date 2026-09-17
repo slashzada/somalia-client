@@ -41,31 +41,60 @@ namespace PlayerSlap
     // Procura o script slapxx.cs na lista de scripts ativos do GTA para sincronizar com o toggle do menu
     static bool SyncCleoActiveScripts(bool enable)
     {
+        bool bAnyFound = false;
         __try
         {
             void** ppActiveScripts = reinterpret_cast<void**>(0x00A8B42C);
             if (!ppActiveScripts || !*ppActiveScripts) return false;
 
             // Assinatura única dos primeiros 10 bytes de slapxx.cs: "62 06 0E 0B 'b' 'y' ' ' 'w' 'o' 'k'"
-            uint8_t slapSignature[] = { 0x62, 0x06, 0x0E, 0x0B, 0x62, 0x79, 0x20, 0x77, 0x6F, 0x6B };
+            static const uint8_t slapSignature[] = { 0x62, 0x06, 0x0E, 0x0B, 0x62, 0x79, 0x20, 0x77, 0x6F, 0x6B };
             void* pCurrent = *ppActiveScripts;
 
             while (pCurrent)
             {
-                uint8_t* pBaseIP = *reinterpret_cast<uint8_t**>(reinterpret_cast<uintptr_t>(pCurrent) + 0x10);
-                if (pBaseIP && !IsBadReadPtr(pBaseIP, sizeof(slapSignature)))
+                uintptr_t scriptAddr = reinterpret_cast<uintptr_t>(pCurrent);
+                bool isMatch = false;
+
+                char* szName = reinterpret_cast<char*>(scriptAddr + 0x08);
+                if (szName && !IsBadReadPtr(szName, 8))
                 {
-                    if (memcmp(pBaseIP, slapSignature, sizeof(slapSignature)) == 0)
+                    if (_strnicmp(szName, "slap", 4) == 0)
+                        isMatch = true;
+                }
+
+                if (!isMatch)
+                {
+                    uint8_t* pBaseIP = *reinterpret_cast<uint8_t**>(scriptAddr + 0x10);
+                    if (pBaseIP && !IsBadReadPtr(pBaseIP, sizeof(slapSignature)))
                     {
-                        *reinterpret_cast<bool*>(reinterpret_cast<uintptr_t>(pCurrent) + 0x38) = enable;
-                        return true;
+                        if (memcmp(pBaseIP, slapSignature, sizeof(slapSignature)) == 0)
+                            isMatch = true;
+                    }
+                }
+
+                if (isMatch)
+                {
+                    bAnyFound = true;
+                    *reinterpret_cast<bool*>(scriptAddr + 0xC4) = enable;
+                    *reinterpret_cast<bool*>(scriptAddr + 0x38) = enable;
+                    *reinterpret_cast<bool*>(scriptAddr + 0xBC) = enable;
+
+                    if (!enable)
+                    {
+                        *reinterpret_cast<uint32_t*>(scriptAddr + 0xCC) = 0x7FFFFFFF;
+                    }
+                    else
+                    {
+                        if (*reinterpret_cast<uint32_t*>(scriptAddr + 0xCC) >= 0x70000000)
+                            *reinterpret_cast<uint32_t*>(scriptAddr + 0xCC) = 0;
                     }
                 }
                 pCurrent = *reinterpret_cast<void**>(pCurrent);
             }
         }
         __except (EXCEPTION_EXECUTE_HANDLER) {}
-        return false;
+        return bAnyFound;
     }
 
     void Update()
