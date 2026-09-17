@@ -75,7 +75,7 @@ cl /nologo /O2 /MT /std:c++20 /EHsc /W3 /utf-8 /D "WIN32" /D "_WINDOWS" /D "NDEB
    ..\..\SomaliaNative\Render\ImGui\imgui_impl_dx9.cpp ^
    ..\..\SomaliaNative\Render\ImGui\imgui_impl_win32.cpp ^
    /Fe:"SomaliaLoader.exe" ^
-   /link /SUBSYSTEM:WINDOWS ^
+   /link /SUBSYSTEM:WINDOWS /DYNAMICBASE /NXCOMPAT /OPT:REF /OPT:ICF ^
    user32.lib gdi32.lib d3d9.lib wininet.lib shell32.lib ole32.lib dwmapi.lib advapi32.lib
 
 if %ERRORLEVEL% equ 0 (

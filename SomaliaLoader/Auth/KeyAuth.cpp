@@ -1,4 +1,5 @@
 #include "KeyAuth.h"
+#include "XorStr.h"
 #include <windows.h>
 #include <wininet.h>
 #include <sstream>
@@ -17,9 +18,9 @@ std::string KeyAuthClient::GetHWID()
     char buffer[256] = { 0 };
     DWORD bufferSize = sizeof(buffer);
     HKEY hKey;
-    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, "SOFTWARE\\Microsoft\\Cryptography", 0, KEY_READ | KEY_WOW64_64KEY, &hKey) == ERROR_SUCCESS)
+    if (RegOpenKeyExA(HKEY_LOCAL_MACHINE, XOR("SOFTWARE\\Microsoft\\Cryptography"), 0, KEY_READ | KEY_WOW64_64KEY, &hKey) == ERROR_SUCCESS)
     {
-        RegQueryValueExA(hKey, "MachineGuid", NULL, NULL, reinterpret_cast<LPBYTE>(buffer), &bufferSize);
+        RegQueryValueExA(hKey, XOR("MachineGuid"), NULL, NULL, reinterpret_cast<LPBYTE>(buffer), &bufferSize);
         RegCloseKey(hKey);
     }
     if (buffer[0] != '\0')
@@ -35,10 +36,10 @@ std::string KeyAuthClient::GetHWID()
 std::string KeyAuthClient::HttpPost(const std::string& postData)
 {
     std::string response;
-    HINTERNET hInternet = InternetOpenA("SomaliaClient/1.0", INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
+    HINTERNET hInternet = InternetOpenA(XOR("SomaliaClient/1.0"), INTERNET_OPEN_TYPE_DIRECT, NULL, NULL, 0);
     if (!hInternet) return "";
 
-    HINTERNET hConnect = InternetConnectA(hInternet, "keyauth.win", INTERNET_DEFAULT_HTTPS_PORT, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
+    HINTERNET hConnect = InternetConnectA(hInternet, XOR("keyauth.win"), INTERNET_DEFAULT_HTTPS_PORT, NULL, NULL, INTERNET_SERVICE_HTTP, 0, 0);
     if (!hConnect)
     {
         InternetCloseHandle(hInternet);
@@ -46,7 +47,7 @@ std::string KeyAuthClient::HttpPost(const std::string& postData)
     }
 
     const char* acceptTypes[] = { "*/*", NULL };
-    HINTERNET hRequest = HttpOpenRequestA(hConnect, "POST", "/api/1.2/", NULL, NULL, acceptTypes, INTERNET_FLAG_SECURE | INTERNET_FLAG_RELOAD, 0);
+    HINTERNET hRequest = HttpOpenRequestA(hConnect, "POST", XOR("/api/1.2/"), NULL, NULL, acceptTypes, INTERNET_FLAG_SECURE | INTERNET_FLAG_RELOAD, 0);
     if (!hRequest)
     {
         InternetCloseHandle(hConnect);
@@ -54,7 +55,7 @@ std::string KeyAuthClient::HttpPost(const std::string& postData)
         return "";
     }
 
-    std::string headers = "Content-Type: application/x-www-form-urlencoded\r\n";
+    std::string headers = XOR_STR("Content-Type: application/x-www-form-urlencoded\r\n");
     BOOL sent = HttpSendRequestA(hRequest, headers.c_str(), (DWORD)headers.length(), (LPVOID)postData.c_str(), (DWORD)postData.length());
 
     if (sent)

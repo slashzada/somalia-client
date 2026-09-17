@@ -84,7 +84,7 @@ cl /nologo /O2 /MT /std:c++20 /EHsc /W3 /D "WIN32" /D "_WINDOWS" /D "_USRDLL" /D
    ..\Features\PlayerSlap\PlayerSlap.cpp ^
    ..\Features\FastSwitch\FastSwitch.cpp ^
    ..\Features\LuaSlide\LuaSlide.cpp ^
-   /link /DLL /OUT:"SomaliaNative.asi" user32.lib gdi32.lib d3d9.lib shell32.lib wininet.lib
+   /link /DLL /DYNAMICBASE /NXCOMPAT /OPT:REF /OPT:ICF /OUT:"SomaliaNative.asi" user32.lib gdi32.lib d3d9.lib shell32.lib wininet.lib
 
 if %ERRORLEVEL% EQU 0 (
     echo ========================================================

@@ -3,6 +3,7 @@
 #include "../../Config/Config.h"
 #include "../../Core/Logger.h"
 #include "../../Core/RuntimeState.h"
+#include "../../Core/XorStr.h"
 #include "../PlayerSlap/PlayerSlap.h"
 #include "../../Engine/GTA/GTA.h"
 #include "../../Engine/SAMP/SAMP.h"
@@ -242,7 +243,7 @@ namespace LuaSlide
     void ToggleFromMenu()
     {
         // Envia apenas o comando /slide pelo chat do SA-MP tanto para ativar quanto para desativar
-        SAMP::SendChatInput("/slide");
+        SAMP::SendChatInput(XOR("/slide"));
         SyncToIni();
     }
 
