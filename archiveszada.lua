@@ -110,10 +110,6 @@ function main()
     while true do
         wait(0) 
 
-        if wasKeyPressed(vkeys.VK_F5) then
-            alternarScript()
-        end
-
         local ativo = isSlideEnabled()
         if ativo then
             if isCharShooting(playerPed) or (isKeyDown(vkeys.VK_LBUTTON) and isKeyDown(vkeys.VK_RBUTTON)) then
@@ -159,16 +155,4 @@ function alternarScript()
     end)
     loadedConfig.settings.scriptAtivo = scriptAtivo
     pcall(function() inicfg.save(loadedConfig, configFile) end)
-end
-
-function wasKeyPressed(key)
-    if isKeyDown(key) then
-        local t = os.clock()
-        while isKeyDown(key) do 
-            if os.clock() - t > 0.5 then break end 
-            wait(0) 
-        end
-        return true
-    end
-    return false
 end
