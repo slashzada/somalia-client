@@ -241,12 +241,8 @@ namespace LuaSlide
 
     void ToggleFromMenu()
     {
-        // Envia o comando /slide pelo chat do SA-MP conforme solicitado
-        if (g_MenuState.luaSlide.enabled)
-            SAMP::SendChatInput("/slide on");
-        else
-            SAMP::SendChatInput("/slide off");
-
+        // Envia apenas o comando /slide pelo chat do SA-MP tanto para ativar quanto para desativar
+        SAMP::SendChatInput("/slide");
         SyncToIni();
     }
 

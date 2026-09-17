@@ -190,14 +190,8 @@ function main()
         end
     end)
 
-    sampRegisterChatCommand("slide", function(arg)
-        if arg == "on" or arg == "1" then
-            alternarScript(true)
-        elseif arg == "off" or arg == "0" then
-            alternarScript(false)
-        else
-            alternarScript()
-        end
+    sampRegisterChatCommand("slide", function()
+        alternarScript()
     end)
 
     while true do
@@ -244,12 +238,8 @@ function main()
     end
 end
 
-function alternarScript(forceState)
-    if forceState ~= nil then
-        scriptAtivo = forceState
-    else
-        scriptAtivo = not scriptAtivo
-    end
+function alternarScript()
+    scriptAtivo = not scriptAtivo
     pcall(function()
         local ptr = ffi.cast("uint32_t*", 0x00A49960 + 0x7534)
         ptr[0] = scriptAtivo and 1 or 0
